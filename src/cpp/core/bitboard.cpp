@@ -3,9 +3,9 @@
 #include "constants.hpp"
                            
 
-
-namespace hyperion { // Ensure this is lowercase
-namespace core {   // Ensure this is lowercase
+// namespace is used for organization
+namespace hyperion { 
+namespace core {
 
 // https://en.wikipedia.org/wiki/Intrinsic_function <- look for more info on general Intrinsic functions
 
