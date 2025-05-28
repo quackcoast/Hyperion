@@ -1,7 +1,7 @@
 // hyperion/src/cpp/core/bitboard.cpp
 #include "bitboard.hpp"
 #include "constants.hpp"
-                           
+
 
 
 namespace hyperion { // Ensure this is lowercase
