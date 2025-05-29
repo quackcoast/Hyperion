@@ -1,13 +1,16 @@
 // hyperion/src/cpp/core/bitboard.cpp
 #include "bitboard.hpp"
 #include "constants.hpp"
+#include "position.hpp"
                            
 
 // namespace is used for organization
 namespace hyperion { 
 namespace core {
 
+// Sources
 // https://en.wikipedia.org/wiki/Intrinsic_function <- look for more info on general Intrinsic functions
+// https://www.chessprogramming.org/BitScan <- bitscan info
 
 /*
 Compilers for C and C++, of Microsoft, Intel, and the GNU Compiler Collection (GCC) implement intrinsics
@@ -156,5 +159,117 @@ std::string square_to_algebraic(int square_index) {
     return s;
 }
 
+// --- attacks ---
+
+// Define the actual storage for the extern declared arrays
+std::array<std::array<bitboard_t, NUM_SQUARES>, 2> pawn_attacks;
+std::array<bitboard_t, NUM_SQUARES> knight_attacks;
+std::array<bitboard_t, NUM_SQUARES> king_attacks;
+
+// Helper to safely add an attack if the target square is on the board
+void add_attack(bitboard_t& attacks_bb, int current_file, int current_rank, int df, int dr) {
+    int to_file = current_file + df;
+    int to_rank = current_rank + dr;
+    if (to_file >= 0 && to_file < 8 && to_rank >= 0 && to_rank < 8) {
+        set_bit(attacks_bb, static_cast<square_e>(to_rank * 8 + to_file));
+    }
+}
+
+void initialize_attack_tables() {
+    for (int sq_idx = 0; sq_idx < NUM_SQUARES; ++sq_idx) {
+        square_e sq = static_cast<square_e>(sq_idx);
+        int rank = sq_idx / 8;
+        int file = sq_idx % 8;
+
+        // Pawn attacks
+        pawn_attacks[WHITE][sq_idx] = EMPTY_BB;
+        if (rank < 7) { // White pawns can't attack from 8th rank
+            if (file > 0) set_bit(pawn_attacks[WHITE][sq_idx], static_cast<square_e>((rank + 1) * 8 + (file - 1))); // Capture left
+            if (file < 7) set_bit(pawn_attacks[WHITE][sq_idx], static_cast<square_e>((rank + 1) * 8 + (file + 1))); // Capture right
+        }
+        pawn_attacks[BLACK][sq_idx] = EMPTY_BB;
+        if (rank > 0) { // Black pawns can't attack from 1st rank
+            if (file > 0) set_bit(pawn_attacks[BLACK][sq_idx], static_cast<square_e>((rank - 1) * 8 + (file - 1))); // Capture left
+            if (file < 7) set_bit(pawn_attacks[BLACK][sq_idx], static_cast<square_e>((rank - 1) * 8 + (file + 1))); // Capture right
+        }
+
+        // Knight attacks
+        knight_attacks[sq_idx] = EMPTY_BB;
+        const int knight_moves[8][2] = {
+            {1, 2}, {1, -2}, {-1, 2}, {-1, -2},
+            {2, 1}, {2, -1}, {-2, 1}, {-2, -1}
+        };
+        for (const auto& move : knight_moves) {
+            add_attack(knight_attacks[sq_idx], file, rank, move[0], move[1]);
+        }
+
+        // King attacks
+        king_attacks[sq_idx] = EMPTY_BB;
+        const int king_moves[8][2] = {
+            {0, 1}, {0, -1}, {1, 0}, {-1, 0},
+            {1, 1}, {1, -1}, {-1, 1}, {-1, -1}
+        };
+        for (const auto& move : king_moves) {
+            add_attack(king_attacks[sq_idx], file, rank, move[0], move[1]);
+        }
+    }
+    // Slider attack tables (e.g., magic bitboards) would be initialized here too.
+}
+// --- Basic Slider Attack Generation (Ray Casting - Slower, for illustration) ---
+// For high performance, you'd use Magic Bitboards.
+
+// Directions: N, S, E, W, NE, NW, SE, SW
+const int RAYS_DELTAS[8][2] = {
+    {0, 1}, {0, -1}, {1, 0}, {-1, 0}, // Rook-like (Orthogonal)
+    {1, 1}, {-1, 1}, {1, -1}, {-1, -1} // Bishop-like (Diagonal)
+};
+
+bitboard_t get_rook_attacks(square_e sq, bitboard_t occupied) {
+    bitboard_t attacks = EMPTY_BB;
+    int r = static_cast<int>(sq) / 8;
+    int f = static_cast<int>(sq) % 8;
+
+    for (int i = 0; i < 4; ++i) { // First 4 are orthogonal directions
+        for (int d = 1; d < 8; ++d) {
+            int next_f = f + RAYS_DELTAS[i][0] * d;
+            int next_r = r + RAYS_DELTAS[i][1] * d;
+
+            if (next_f >= 0 && next_f < 8 && next_r >= 0 && next_r < 8) {
+                square_e target_sq = static_cast<square_e>(next_r * 8 + next_f);
+                set_bit(attacks, target_sq);
+                if (get_bit(occupied, target_sq)) { // Stop if piece encountered
+                    break;
+                }
+            } else { // Off board
+                break;
+            }
+        }
+    }
+    return attacks;
+}
+
+bitboard_t get_bishop_attacks(square_e sq, bitboard_t occupied) {
+    bitboard_t attacks = EMPTY_BB;
+    int r = static_cast<int>(sq) / 8;
+    int f = static_cast<int>(sq) % 8;
+
+    for (int i = 4; i < 8; ++i) { // Last 4 are diagonal directions
+        for (int d = 1; d < 8; ++d) {
+            int next_f = f + RAYS_DELTAS[i][0] * d;
+            int next_r = r + RAYS_DELTAS[i][1] * d;
+
+            if (next_f >= 0 && next_f < 8 && next_r >= 0 && next_r < 8) {
+                square_e target_sq = static_cast<square_e>(next_r * 8 + next_f);
+                set_bit(attacks, target_sq);
+                if (get_bit(occupied, target_sq)) { // Stop if piece encountered
+                    break;
+                }
+            } else { // Off board
+                break;
+            }
+        }
+    }
+    return attacks;
+}
 } // namespace core   
 } // namespace hyperion 
