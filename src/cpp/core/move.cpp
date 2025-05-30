@@ -1,5 +1,3 @@
 //Move.cpp
-/*Implement constructors and methods.
-to_uci_string(): e.g., e2e4, g1f3, e7e8q (for queen promotion).
-from_uci_string(): Parse UCI string
-*/
+//everything in the headerfile is defined there (because everything is so short there, makes no sense to seperate it).
+//im keeping this file for now because I might need to add stuff here later
