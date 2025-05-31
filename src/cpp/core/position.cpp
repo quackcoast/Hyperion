@@ -1,12 +1,12 @@
 // hyperion/src/cpp/core/position.cpp
-#include "position.hpp"
-#include "constants.hpp"
-#include "bitboard.hpp"
-#include "zobrist.hpp"    
-#include "move.hpp"       
-#include <sstream>        
-#include <algorithm>      
-#include <cctype>         
+#include "position.hpp"  
+#include "constants.hpp" 
+#include "bitboard.hpp"  
+#include "zobrist.hpp"  
+#include "move.hpp"     
+#include <sstream>      
+#include <algorithm>    
+#include <cctype>        
 
 /* piece_info_from_fen_char */
 // Converts a FEN character (e.g., 'P', 'n', 'k') to a pair of piece type and color.
@@ -567,10 +567,107 @@ void Position::make_move(const Move& m) {
 //--
 // Reverts the last move made on the board, restoring the previous position state.
 // Uses the information stored in the history_stack (StateInfo) to undo the changes made by make_move.
-// 
-// Note: I need to finish this.
+// This function uses the provided 'Move' object and undos the move that was just done
+// and pops a 'statinfo' object from the history_stack, which contains the variables
+// (like castling rights, EP square, halfmove clock, caputred piece, and the zobrist hash)
+// All board representations (piece_bbs, color_bbs, occupied_bb, board_mailbox
+// are restored to there previous state
 
 void Position::unmake_move(const Move& m) {
+    if(history_stack.empty()) {
+        // should not happen in normal operation if make_move was called
+        // ill possibly have an error/assertion'
+        return;
+    }
+    //1. retieve the previous state from the history
+    StateInfo prev_state = history_stack.back();
+    history_stack.pop_back();
+
+    //2. restore the game state variables from the prev_state
+    //   toggles side_to_move back
+    this->side_to_move = (this->side_to_move == WHITE) ? BLACK : WHITE; // the side that made move m
+
+    // if blacks move was unmade, decrement fullmove_number (fullmove_number--)
+    if (this-> side_to_move == BLACK) {
+        this->fullmove_number--;
+    }
+
+    this->castling_rights = prev_state.castling_rights;
+    this->en_passant_square = prev_state.en_passant_square;
+    this->halfmove_clock = prev_state.halfmove_clock;
+    // the zobrist hash will be restored at the end from the prev_state.hash
+
+    // ---undo piece movements and captures---
+    int mover_color = this->side_to_move;
+    int opponenet_color = (mover_color == WHITE) ? BLACK : WHITE;
+
+    square_e from_sq = m.from_sq;
+    square_e to_sq = m.to_sq;
+    piece_type_e original_moved_piece = m.piece_moved;
+    piece_type_e piece_that_landed_on_to_sq = m.is_promotion() ? m.get_promotion_piece() : original_moved_piece;
+
+    // A. remove the piece that landed on to_sq
+    clear_bit(piece_bbs[static_cast<int>(piece_that_landed_on_to_sq)][mover_color], to_sq);
+
+    // Mailbox for to_sq will be set by captured piece restoration
+    board_mailbox[static_cast<int>(to_sq)] = EMPTY_MAILBOX_VAL;
+
+    // B. Place the original piece back on from_sq
+    set_bit(piece_bbs[static_cast<int>(original_moved_piece)][mover_color], from_sq);
+    board_mailbox[static_cast<int>(from_sq)] = make_mailbox_entry(original_moved_piece, mover_color);
+
+    // C. Restore captured piece, if any
+    piece_type_e captured_piece_type = prev_state.captured_piece_type;
+    int opponent_color = (mover_color == WHITE) ? BLACK : WHITE;
+    if (captured_piece_type != P_NONE) {
+        square_e actual_capture_sq = to_sq; // Default for normal captures
+
+        if (m.is_en_passant()) {
+            // The pawn was captured on a different square than where the moving pawn landed
+            if (mover_color == WHITE) { // White pawn made the EP capture, black pawn was captured
+                actual_capture_sq = static_cast<square_e>(static_cast<int>(to_sq) - 8);
+            } else { // Black pawn made the EP capture, white pawn was captured
+                actual_capture_sq = static_cast<square_e>(static_cast<int>(to_sq) + 8);
+            }
+        }
+        // Place the captured piece back on its square
+        set_bit(piece_bbs[static_cast<int>(captured_piece_type)][opponent_color], actual_capture_sq);
+        board_mailbox[static_cast<int>(actual_capture_sq)] = make_mailbox_entry(captured_piece_type, opponent_color);
+    }
+
+    // D. Undo castling (move the rook back)
+    if (m.is_castling()) {
+        piece_type_e rook_type = P_ROOK;
+        square_e rook_current_landing_sq, rook_original_home_sq;
+
+        if (m.is_kingside_castle()) {
+            rook_current_landing_sq = (mover_color == WHITE) ? static_cast<square_e>(F1) : static_cast<square_e>(F8);
+            rook_original_home_sq   = (mover_color == WHITE) ? static_cast<square_e>(H1) : static_cast<square_e>(H8);
+        } else { // Queenside
+            rook_current_landing_sq = (mover_color == WHITE) ? static_cast<square_e>(D1) : static_cast<square_e>(D8);
+            rook_original_home_sq   = (mover_color == WHITE) ? static_cast<square_e>(A1) : static_cast<square_e>(A8);
+        }
+        // Remove rook from its landing square
+        clear_bit(piece_bbs[static_cast<int>(rook_type)][mover_color], rook_current_landing_sq);
+        board_mailbox[static_cast<int>(rook_current_landing_sq)] = EMPTY_MAILBOX_VAL;
+
+        // Place rook back on its original home square
+        set_bit(piece_bbs[static_cast<int>(rook_type)][mover_color], rook_original_home_sq);
+        board_mailbox[static_cast<int>(rook_original_home_sq)] = make_mailbox_entry(rook_type, mover_color);
+    }
+
+    // E. Update derived bitboards (color_bbs, occupied_bb) from the restored piece_bbs
+    // This is the same way make_move updates them after its own piece_bbs modifications.
+    color_bbs[WHITE] = piece_bbs[P_PAWN][WHITE] | piece_bbs[P_KNIGHT][WHITE] |
+                       piece_bbs[P_BISHOP][WHITE] | piece_bbs[P_ROOK][WHITE] |
+                       piece_bbs[P_QUEEN][WHITE] | piece_bbs[P_KING][WHITE];
+    color_bbs[BLACK] = piece_bbs[P_PAWN][BLACK] | piece_bbs[P_KNIGHT][BLACK] |
+                       piece_bbs[P_BISHOP][BLACK] | piece_bbs[P_ROOK][BLACK] |
+                       piece_bbs[P_QUEEN][BLACK] | piece_bbs[P_KING][BLACK];
+    occupied_bb = color_bbs[WHITE] | color_bbs[BLACK];
+
+    // F. Restore the Zobrist hash to exactly what it was before the move
+    this->current_hash = prev_state.hash;
 }
 
 //--
