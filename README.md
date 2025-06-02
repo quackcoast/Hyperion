@@ -1,13 +1,20 @@
-# Hyperion
+# Hyperion Chess Engine
+Hyperion is a MCTS-NN based chess engine built primarily in C++. The Engine is still in development, but should be done by the end of Summer 2025.
 
-How to run tests?
+## How to build?
+1. Open a terminal in the `hyperion` directory
 
----
-* BitBoard tests can be compiled with the following command:
+2. Next, cd into the build directory (`hyperion/build/`)
 
-    *g++ -std=c++17 -Wall -Wextra -Icore -o test_bitboard.exe src/cpp/core/test_bitboard.cpp src/cpp/core/bitboard.cpp*
+3) Now run `cmake -G "MinGW Makefiles" ..`
 
-* Run it:
+4) Still in the build directory, run `mingw32-make` (if this doesn't work, try just `make` instead)
+5) Run the executables by running the command `.\bin\HyperionEngine.exe` 
 
-    *./test_bitboard.exe*
----
+## Tasks Completed
+- [ ] Chess Logic Library
+- [ ] Basic Monte-Carlo Tree Search Implementation
+- [ ] Initial Neural Network Creation (Supervised Learning)
+- [ ] Initial Neural Network Implementation 
+- [ ] Neural Network Self-Play (Reinforcement Learning)
+- [ ] Refinements/Advanced Features

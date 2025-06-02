@@ -676,8 +676,60 @@ void Position::unmake_move(const Move& m) {
 // Checks if a given square is attacked by any piece of the specified attacker's color.
 // Requires generation of attack bitboards for all piece types of the attacker_color that could attack sq_to_check.
 //
-// Note: I need to finish this.
 bool Position::is_square_attacked(square_e sq_to_check, int by_attacker_color) const {
+    if (sq_to_check == square_e::NO_SQ) { // this would be an invalid input square
+        return false;
+    }
+
+    int sq_idx = static_cast<int>(sq_to_check);
+
+    // 1. Check attacks by Pawns of 'by_attacker_color'
+    // To find if 'sq_to_check' is attacked by a pawn of 'by_attacker_color',
+    // we look at the squares from which such a pawn would attack 'sq_to_check'.
+    // These squares are equivalent to the squares a pawn of the *opposite* color
+    // on 'sq_to_check' would attack.
+    int defender_color = (by_attacker_color == WHITE) ? BLACK : WHITE;
+    // pawn_attacks[defender_color][sq_idx] gives squares a 'defender_color' pawn on 'sq_idx' attacks.
+    // If any of these squares are occupied by a 'by_attacker_color' pawn, then 'sq_to_check' is attacked.
+    if ((hyperion::core::pawn_attacks[defender_color][sq_idx] & get_pieces(P_PAWN, by_attacker_color)) != 0) {
+        return true;
+    }
+
+    // 2. Check attacks by Knights of 'by_attacker_color'
+    // knight_attacks[sq_idx] gives all squares a knight on 'sq_idx' attacks.
+    // If any of these squares are occupied by a 'by_attacker_color' knight, then 'sq_idx' is attacked.
+    if ((hyperion::core::knight_attacks[sq_idx] & get_pieces(P_KNIGHT, by_attacker_color)) != 0) {
+        return true;
+    }
+
+    // 3. Check attacks by the King of 'by_attacker_color'
+    // king_attacks[sq_idx] gives all squares a king on 'sq_idx' attacks.
+    if ((hyperion::core::king_attacks[sq_idx] & get_pieces(P_KING, by_attacker_color)) != 0) {
+        return true;
+    }
+
+    // For slider pieces (rooks, bishops, queens), we use the magic bitboard functions.
+    // this->occupied_bb should be up-to-date, representing all pieces on the board.
+
+    // 4. Check attacks by Rooks (and rook-like Queen moves) of 'by_attacker_color'
+    // get_rook_slider_attacks(sq_to_check, this->occupied_bb) returns a bitboard of squares
+    // that a rook on 'sq_to_check'' would attack, considering current board occupancy.
+    // If any of these squares are occupied by 'by_attacker_color's rooks or queen,
+    // then 'sq_to_check' is attacked by that rook/queen.
+    bitboard_t rook_attack_potential = hyperion::core::get_rook_slider_attacks(sq_to_check, this->occupied_bb);
+    if ((rook_attack_potential & (get_pieces(P_ROOK, by_attacker_color) | get_pieces(P_QUEEN, by_attacker_color))) != 0) {
+        return true;
+    }
+
+    // 5. Check attacks by Bishops (and bishop-like Queen moves) of 'by_attacker_color'
+    // Similar logic to rooks.
+    bitboard_t bishop_attack_potential = hyperion::core::get_bishop_slider_attacks(sq_to_check, this->occupied_bb);
+    if ((bishop_attack_potential & (get_pieces(P_BISHOP, by_attacker_color) | get_pieces(P_QUEEN, by_attacker_color))) != 0) {
+        return true;
+    }
+
+    // If no piece of 'by_attacker_color' attacks 'sq_to_check'
+    return false;
 }
 
 //--

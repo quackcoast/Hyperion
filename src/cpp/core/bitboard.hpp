@@ -73,12 +73,32 @@ extern std::array<bitboard_t, NUM_SQUARES> knight_attacks;
 // King attacks: [from_square]
 extern std::array<bitboard_t, NUM_SQUARES> king_attacks;
 
-// Functions to generate slider attacks
-// TODO MAGIC BITBOARDS
-// Queen attacks can combine rook and bishop attacks
+// --- Magic Bitboard Structures and Declarations ---
+struct MagicEntry {
+    uint64_t magic_number;
+    bitboard_t mask;
+    bitboard_t* attacks;
+    uint8_t shift;
+};
 
-// Call this once at program startup
-//void initialize_attack_tables();
+extern MagicEntry rook_magic_entries[NUM_SQUARES];
+extern MagicEntry bishop_magic_entries[NUM_SQUARES];
+
+constexpr size_t ROOK_ATTACK_TABLE_SIZE = 38404; 
+constexpr size_t BISHOP_ATTACK_TABLE_SIZE = 5248; 
+
+extern bitboard_t rook_attack_table[ROOK_ATTACK_TABLE_SIZE];
+extern bitboard_t bishop_attack_table[BISHOP_ATTACK_TABLE_SIZE];
+
+// --- New Slider Attack Generation Functions ---
+bitboard_t get_rook_slider_attacks(square_e sq, bitboard_t occupied);
+bitboard_t get_bishop_slider_attacks(square_e sq, bitboard_t occupied);
+
+inline bitboard_t get_queen_slider_attacks(square_e sq, bitboard_t occupied) {
+    return get_rook_slider_attacks(sq, occupied) | get_bishop_slider_attacks(sq, occupied);
+}
+
+void initialize_attack_tables();
 
 } // namespace core 
 } // namespace hyperion 
