@@ -11,6 +11,9 @@ set(CMAKE_CXX_STANDARD 17) # tells the compiler to use C++17, can be changed to 
 set(CMAKE_CXX_STANDARD_REQUIRED True) # prevents compilation of the compiler that doesn't support the above specified version
 set(CMAKE_CXX_EXTENSIONS OFF) # no compiler specific extensions, just use the C++ standard
 
+# --- CMake Option for BMI2 ---
+option(HYPERION_ENABLE_BMI2 "Enable BMI2 instruction set optimizations (for PEXT/PDEP)" ON)
+
 # --- Compiler Flags ---
 # Add common warning flags
 if(MSVC) # MSVC means the Miscrosoft Visual C++ compiler
@@ -34,7 +37,6 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin) # CMAKE_RUNTIME_OUTP
 # ! IF ADDING NEW SOURCE (.cpp) FILES, MAKE SURE TO ADD THEM HERE ! (header files dont need to be added)
 set(ENGINE_CORE_SOURCES
     src/cpp/core/bitboard.cpp
-    src/cpp/core/move.cpp
     src/cpp/core/movegen.cpp
     src/cpp/core/position.cpp
     src/cpp/core/zobrist.cpp
@@ -72,6 +74,31 @@ target_include_directories(EngineSearch PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/src/cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/cpp/search
 )
+
+if(HYPERION_ENABLE_BMI2)
+    message(STATUS "BMI2 optimizations requested for EngineCore.")
+    if(MSVC)
+        # For MSVC, /arch:AVX2 enables AVX2 which implies BMI2.
+        # This will lead to __AVX2__ being defined.
+        target_compile_options(EngineCore PRIVATE /arch:AVX2)
+        message(STATUS "  MSVC: Added /arch:AVX2 to EngineCore.")
+    elseif(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+        # For GCC/Clang, use -mbmi2
+        # This will lead to __BMI2__ being defined.
+        include(CheckCXXCompilerFlag) # Include the module for checking flags
+        check_cxx_compiler_flag("-mbmi2" COMPILER_SUPPORTS_BMI2)
+        if(COMPILER_SUPPORTS_BMI2)
+            target_compile_options(EngineCore PRIVATE -mbmi2)
+            message(STATUS "  GCC/Clang: Added -mbmi2 to EngineCore.")
+        else()
+            message(WARNING "  GCC/Clang: Compiler does not support -mbmi2. BMI2 optimizations for EngineCore will not be enabled.")
+        endif()
+    else()
+        message(WARNING "  Unsupported compiler for BMI2 flags: ${CMAKE_CXX_COMPILER_ID}. BMI2 optimizations for EngineCore may not be enabled.")
+    endif()
+else()
+    message(STATUS "BMI2 optimizations are disabled for EngineCore.")
+endif()
 
 # this tells the compiler that the EngineSearch library needs code from the EngineCore library (linkning) in order to compile and link correctly
 # the PRIVATE keywords mean that EngineSearch itself needs EngineCore, but other targets that link against EngineSearch don't directly ->
@@ -123,6 +150,10 @@ target_include_directories(TestBitboard PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src/
 # see lines 111-114
 target_link_libraries(TestBitboard PRIVATE EngineCore)
 
+add_executable(TestMovegen src/cpp/core/perft.cpp)
+target_include_directories(TestMovegen PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src/cpp)
+target_link_libraries(TestMovegen PRIVATE EngineCore)
+target_compile_options(TestMovegen PRIVATE -Ofast)
 
 # --- Future NN Library Integration (Placeholder) ---
 # When you integrate ONNX Runtime or another NN library:
@@ -140,7 +171,11 @@ message(STATUS "  Source directory: ${CMAKE_CURRENT_SOURCE_DIR}")
 message(STATUS "  Build directory:  ${CMAKE_BINARY_DIR}")
 message(STATUS "  Compiler: ${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSION}")
 message(STATUS "  Build type: ${CMAKE_BUILD_TYPE}") # Will be empty if not set via -DCMAKE_BUILD_TYPE
-
+if(HYPERION_ENABLE_BMI2)
+    message(STATUS "  BMI2 Optimizations: ENABLED (if supported by compiler)")
+else()
+    message(STATUS "  BMI2 Optimizations: DISABLED")
+endif()
 
 # HOW TO BUILD:
 # 1) open a terminal in the hyperion directory
@@ -156,3 +191,11 @@ message(STATUS "  Build type: ${CMAKE_BUILD_TYPE}") # Will be empty if not set v
 # 1) cd into the build directory (hyperion/build/)
 # 2) run `mingw32-make` (or `make` if that doesn't work)
 # 3) run the executables as described above
+
+# HOW TO BUILD TO RUN FAST:
+# 1) cmake -G "MinGW Makefiles" -DHYPERION_ENABLE_BMI2=ON -DCMAKE_BUILD_TYPE=Release ..
+#       - explanation '-G "MinGW Makefiles" tells CMake to generate Makefiles for MinGW
+#       and -DYPERION_ENABLE_BMI2=0 explicitly enables BMI2 option
+#       and -DCMAKE_BUILD_TYPE=Release tells cmake to use optimizations like -O3
+# 2) run 'mingw32-make -jN # replace N with the number of cores for faster compilation
+# 3) to run the executables, do `.\bin\NAME_OF_EXECUTABLE.exe` (e.g., `.\bin\HyperionEngine.exe` or `.\bin\TestBitboard.exe`)
