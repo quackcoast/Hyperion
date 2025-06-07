@@ -1,0 +1,2 @@
+C:\msys64\mingw64\bin\ar.exe qc lib\libEngineUCI.a CMakeFiles/EngineUCI.dir/src/cpp/uci/engine.cpp.obj CMakeFiles/EngineUCI.dir/src/cpp/uci/uci.cpp.obj
+C:\msys64\mingw64\bin\ranlib.exe lib\libEngineUCI.a

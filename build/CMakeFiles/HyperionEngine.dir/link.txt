@@ -1,0 +1,3 @@
+"C:\Program Files\CMake\bin\cmake.exe" -E rm -f CMakeFiles\HyperionEngine.dir/objects.a
+C:\msys64\mingw64\bin\ar.exe qc CMakeFiles\HyperionEngine.dir/objects.a @CMakeFiles\HyperionEngine.dir\objects1.rsp
+C:\msys64\mingw64\bin\g++.exe -g -Wl,--whole-archive CMakeFiles\HyperionEngine.dir/objects.a -Wl,--no-whole-archive -o bin\HyperionEngine.exe -Wl,--out-implib,lib\libHyperionEngine.dll.a -Wl,--major-image-version,0,--minor-image-version,0 @CMakeFiles\HyperionEngine.dir\linkLibs.rsp

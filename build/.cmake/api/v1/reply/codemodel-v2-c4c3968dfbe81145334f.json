@@ -1,0 +1,96 @@
+{
+	"configurations" : 
+	[
+		{
+			"directories" : 
+			[
+				{
+					"build" : ".",
+					"jsonFile" : "directory-.-Debug-d0094a50bb2071803777.json",
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.15"
+					},
+					"projectIndex" : 0,
+					"source" : ".",
+					"targetIndexes" : 
+					[
+						0,
+						1,
+						2,
+						3,
+						4
+					]
+				}
+			],
+			"name" : "Debug",
+			"projects" : 
+			[
+				{
+					"directoryIndexes" : 
+					[
+						0
+					],
+					"name" : "HyperionEngineProject",
+					"targetIndexes" : 
+					[
+						0,
+						1,
+						2,
+						3,
+						4
+					]
+				}
+			],
+			"targets" : 
+			[
+				{
+					"directoryIndex" : 0,
+					"id" : "EngineCore::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-EngineCore-Debug-48fdf6d0e41999936d45.json",
+					"name" : "EngineCore",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "EngineSearch::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-EngineSearch-Debug-9cd782efb4334c901a02.json",
+					"name" : "EngineSearch",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "EngineUCI::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-EngineUCI-Debug-0e1750abd700b23755fe.json",
+					"name" : "EngineUCI",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "HyperionEngine::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-HyperionEngine-Debug-83d8510838143085667f.json",
+					"name" : "HyperionEngine",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "TestBitboard::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-TestBitboard-Debug-d36a4f30f5acb80a24f5.json",
+					"name" : "TestBitboard",
+					"projectIndex" : 0
+				}
+			]
+		}
+	],
+	"kind" : "codemodel",
+	"paths" : 
+	{
+		"build" : "C:/Users/thedu/OneDrive/Desktop/C++/hyperion-ce/Hyperion/build",
+		"source" : "C:/Users/thedu/OneDrive/Desktop/C++/hyperion-ce/Hyperion"
+	},
+	"version" : 
+	{
+		"major" : 2,
+		"minor" : 8
+	}
+}

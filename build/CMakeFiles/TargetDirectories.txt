@@ -1,0 +1,7 @@
+C:/Users/thedu/OneDrive/Desktop/C++/hyperion-ce/Hyperion/build/CMakeFiles/EngineCore.dir
+C:/Users/thedu/OneDrive/Desktop/C++/hyperion-ce/Hyperion/build/CMakeFiles/EngineSearch.dir
+C:/Users/thedu/OneDrive/Desktop/C++/hyperion-ce/Hyperion/build/CMakeFiles/EngineUCI.dir
+C:/Users/thedu/OneDrive/Desktop/C++/hyperion-ce/Hyperion/build/CMakeFiles/HyperionEngine.dir
+C:/Users/thedu/OneDrive/Desktop/C++/hyperion-ce/Hyperion/build/CMakeFiles/TestBitboard.dir
+C:/Users/thedu/OneDrive/Desktop/C++/hyperion-ce/Hyperion/build/CMakeFiles/edit_cache.dir
+C:/Users/thedu/OneDrive/Desktop/C++/hyperion-ce/Hyperion/build/CMakeFiles/rebuild_cache.dir
