@@ -10,14 +10,12 @@
 It's highly effective for magic bitboard implementations because it can directly map the bits of occupied squares
 on a "mask" to a dense index, replacing the traditional magic multiplication and shift.*/
 
+#undef USE_BMI2_SLIDERS // Ensure it's not defined from a previous include or build flag
+
 #if (defined(__GNUC__) || defined(__clang__)) && defined(__BMI2__)
     #define USE_BMI2_SLIDERS 1
-    //#error "BMI2 for GCC/Clang path taken"
-#elif defined(_MSC_VER) && defined(__AVX2__) // /arch:AVX2 generally means BMI2 is available
+#elif defined(_MSC_VER) && defined(__AVX2__)
     #define USE_BMI2_SLIDERS 1
-    //#error "BMI2 for MSVC path taken (_AVX2_ defined)"
-#else
-    #define USE_BMI2_SLIDERS
 #endif
 
 // namespace is used for organization
@@ -45,50 +43,6 @@ know if we use clang or GCC (ive used GCC more in the past). In the end, higher 
 #else
     // Fallback implementations if no intrinsics, we should TRY use them though for performance gain
 #endif
-
-// --- Core Bitboard Operations ---
-
-//--
-/* set_bit (int version) */
-//--
-// Sets the bit at the given square_index in the bitboard.
-// The square_index is 0-63, corresponding to A1-H8.
-// Modifies the bitboard in place.
-// Performs a bounds check on square_index.
-void set_bit(bitboard_t& bb, int square_index) {
-    if(square_index >= 0 && square_index < hyperion::core::NUM_SQUARES) { //bounds check
-        bb |= (1ULL << square_index); // unsigned long long
-    }
-}
-
-//--
-/* clear_bit (int version) */
-//--
-// Clears the bit at the given square_index in the bitboard.
-// The square_index is 0-63, corresponding to A1-H8.
-// Modifies the bitboard in place.
-// Performs a bounds check on square_index.
-void clear_bit(bitboard_t& bb, int square_index) {
-    if(square_index >= 0 && square_index < hyperion::core::NUM_SQUARES) { //bounds check
-        bb &= ~(1ULL << square_index); // unsigned long long
-    }
-}
-
-//--
-/* get_bit (int version) */
-//--
-// Checks if the bit at the given square_index in the bitboard is set.
-// The square_index is 0-63, corresponding to A1-H8.
-// Returns true if the bit is set, false otherwise.
-// Performs a bounds check on square_index.
-bool get_bit(bitboard_t bb, int square_index) {
-    if (square_index < 0 || square_index >= hyperion::core::NUM_SQUARES) { //bounds check
-        return false;
-    }
-    return (bb & (1ULL << square_index)) != 0;
-}
-
-// --- Utility Functions ---
 
 //--
 /* print_bitboard */
@@ -189,28 +143,6 @@ int get_lsb_index(bitboard_t bb) {
     }
     return count;
 #endif
-}
-
-//--
-/* pop_lsb */
-//--
-// Finds the index of the least significant bit (LSB), clears it from the bitboard, and returns the index.
-// Modifies the input bitboard `bb` by clearing the LSB.
-// Internally uses get_lsb_index to find the LSB.
-// Uses an efficient method (bb &= (bb - 1)) to clear the LSB.
-// Returns the 0-63 index of the LSB that was popped.
-// Returns static_cast<int>(hyperion::core::square_e::NO_SQ) if the bitboard was initially empty.
-int pop_lsb(bitboard_t& bb) {
-    int lsb_idx = get_lsb_index(bb); 
-    if (lsb_idx != static_cast<int>(hyperion::core::square_e::NO_SQ)) {
-        // this should be faster then calling the clear_bit()
-        // LSB: bb &= (bb -1); <-- should be faster if LSB was
-        // found via intrinsics
-        // If we decide not to use intrinsics, this can all be chaned to just call
-        // clear_bit
-        bb &= (bb - 1); // Efficiently clear LSB
-    }
-    return lsb_idx;
 }
 
 //--

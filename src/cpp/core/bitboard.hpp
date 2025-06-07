@@ -6,7 +6,8 @@
 
 #include <cstdint> 
 #include <string>   
-#include <iostream> 
+#include <iostream>
+#include <cassert>
 
 namespace hyperion {
 namespace core {   
@@ -17,20 +18,30 @@ const bitboard_t UNIVERSAL_BB = ~0ULL;
 
 // --- Core Bitboard Operations ---
 
-void set_bit(bitboard_t& bb, int square_index);
+inline void set_bit(bitboard_t& bb, int square_index) {
+    assert(square_index >= 0 && square_index < NUM_SQUARES);
+    bb |= (1ULL << square_index);
+}
+
+inline void clear_bit(bitboard_t& bb, int square_index) {
+    assert(square_index >= 0 && square_index < NUM_SQUARES);
+    bb &= ~(1ULL << square_index);
+}
+inline bool get_bit(bitboard_t bb, int square_index) {
+    assert(square_index >= 0 && square_index < NUM_SQUARES);
+    return (bb & (1ULL << square_index)) != 0;
+}
+
 inline void set_bit(bitboard_t& bb, square_e sq) {
     if (sq != square_e::NO_SQ) set_bit(bb, static_cast<int>(sq));
 }
-
-void clear_bit(bitboard_t& bb, int square_index);
 inline void clear_bit(bitboard_t& bb, square_e sq) {
     if (sq != square_e::NO_SQ) clear_bit(bb, static_cast<int>(sq));
 }
-
-bool get_bit(bitboard_t bb, int square_index);
 inline bool get_bit(bitboard_t bb, square_e sq) {
     return (sq != square_e::NO_SQ) ? get_bit(bb, static_cast<int>(sq)) : false;
 }
+
 
 // --- Utility Functions ---
 
@@ -38,11 +49,14 @@ void print_bitboard(bitboard_t bb);
 
 int count_set_bits(bitboard_t bb);
 
-// Returns static_cast<int>(square_e::NO_SQ) if bitboard is empty
 int get_lsb_index(bitboard_t bb);
 
-// Returns static_cast<int>(square_e::NO_SQ) if bitboard was empty
-int pop_lsb(bitboard_t& bb);
+inline int pop_lsb(bitboard_t& bb) {
+    assert(bb != 0);
+    const int lsb_idx = get_lsb_index(bb);
+    bb &= (bb - 1);
+    return lsb_idx;
+}
 
 std::string square_to_algebraic(int square_index);
 inline std::string square_to_algebraic(square_e sq) { 

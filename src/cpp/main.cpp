@@ -10,7 +10,6 @@ int main() {
     hyperion::core::initialize_attack_tables();
     std::cout << "Initialization complete." << std::endl;
 
-
     std::cout << "Hyperion Chess Engine" << std::endl;
 
     std::cout << "Hyperion Engine finished." << std::endl;

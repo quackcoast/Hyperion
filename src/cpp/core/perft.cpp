@@ -171,7 +171,7 @@ void perft_divide(hyperion::core::Position& pos, int depth, hyperion::core::Move
 }
 
 
-// Basic check function (similar to your test_zobrist_hashing.cpp)
+// Basic check function
 inline void check(bool condition, const std::string& message) {
     if (!condition) {
         std::cerr << "Assertion failed: " << message << std::endl;
@@ -192,7 +192,7 @@ void run_perft_test(const std::string& fen, int depth, uint64_t expected_nodes,
     // For deeper depths, direct perft is faster if you only need the total.
     // ror shallower depths or debugging, perft_divide is more informative.
     if (depth <= 5) { // Adjust this threshold as needed
-         perft_divide(pos, depth, move_gen, true); // Run verbose perft_divide
+         perft_divide(pos, depth, move_gen, false); // Run verbose perft_divide
          pos.set_from_fen(fen); // Reset position
          actual_nodes = perft(pos, depth, move_gen); // Recalculate for the check
     } else {

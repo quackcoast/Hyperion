@@ -1,8 +1,8 @@
 # Hyperion Chess Engine
 Hyperion is a MCTS-NN based chess engine built primarily in C++. The Engine is still in development, but should be done by the end of Summer 2025.
 
-### Perft test results:
-- Nodes per second: 3.33354e+07 (33.3 Million NPS)
+## Perft test results:
+- Nodes per second: 4.24985e+07 (42.5 Million NPS)
 
 ## How to build?
 1. Open a terminal in the `hyperion` directory
