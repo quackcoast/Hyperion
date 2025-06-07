@@ -1,2 +1,0 @@
-C:\msys64\mingw64\bin\ar.exe qc lib\libEngineCore.a CMakeFiles/EngineCore.dir/src/cpp/core/bitboard.cpp.obj CMakeFiles/EngineCore.dir/src/cpp/core/move.cpp.obj CMakeFiles/EngineCore.dir/src/cpp/core/movegen.cpp.obj CMakeFiles/EngineCore.dir/src/cpp/core/position.cpp.obj CMakeFiles/EngineCore.dir/src/cpp/core/zobrist.cpp.obj
-C:\msys64\mingw64\bin\ranlib.exe lib\libEngineCore.a

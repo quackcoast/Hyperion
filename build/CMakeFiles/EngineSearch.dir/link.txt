@@ -1,2 +1,0 @@
-C:\msys64\mingw64\bin\ar.exe qc lib\libEngineSearch.a CMakeFiles/EngineSearch.dir/src/cpp/search/eval.cpp.obj CMakeFiles/EngineSearch.dir/src/cpp/search/search.cpp.obj CMakeFiles/EngineSearch.dir/src/cpp/search/tt.cpp.obj
-C:\msys64\mingw64\bin\ranlib.exe lib\libEngineSearch.a
