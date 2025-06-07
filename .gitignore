@@ -2,3 +2,4 @@
 /data/raw/games-2024.csv
 *.egg-info/
 __pycache__
+build
