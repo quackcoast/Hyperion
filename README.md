@@ -15,7 +15,7 @@ Hyperion is a MCTS-NN based chess engine built primarily in C++. The Engine is s
 5) Run the executables by running the command `.\bin\HyperionEngine.exe` 
 
 ## Tasks Completed
-- [ ] Chess Logic Library
+- [x] Chess Logic Library
 - [ ] Basic Monte-Carlo Tree Search Implementation
 - [ ] Initial Neural Network Creation (Supervised Learning)
 - [ ] Initial Neural Network Implementation 
