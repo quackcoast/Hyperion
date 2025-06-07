@@ -51,7 +51,6 @@ char fen_char_from_piece_info(hyperion::core::piece_type_e pt, int color) {
             default: return '?';// same here
         }
     }
-    return '?';
 }
 
 
