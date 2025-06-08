@@ -3,5 +3,6 @@
 *.egg-info/
 __pycache__
 build/
+.VSCodeCounter/
+.pytest_cache/
 .VSCodeCounter
-.pytest_cache

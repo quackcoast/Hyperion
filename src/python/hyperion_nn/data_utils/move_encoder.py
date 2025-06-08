@@ -35,12 +35,17 @@ KNIGHT_DIRECTION_MAP = {
 }
 
 UNDERPROMOTION_MAP = {
-    constants.Piece.KNIGHT: 0,  # Knight underpromotion
-    constants.Piece.BISHOP: 1,  # Bishop underpromotion
-    constants.Piece.ROOK: 2     # Rook underpromotion
+    constants.Piece.KNIGHT: 0,  # knight underpromotion
+    constants.Piece.BISHOP: 1,  # bishop underpromotion
+    constants.Piece.ROOK: 2     # rook underpromotion
 }
 
+def _get_delta_idx(move: str) -> int:
 
+    start_idx = constants.SQUARE_INDICIES[move[:2]]
+    end_idx = constants.SQUARE_INDICIES[move[2:4]]
+
+    return end_idx - start_idx
 
 
 def _get_queen_move_dir_and_distance(move: str) -> tuple[int, int]:
@@ -66,32 +71,43 @@ def _get_queen_move_dir_and_distance(move: str) -> tuple[int, int]:
     end_rank = end_idx // 8
 
     if (start_file == end_file): # check if N or S
-        distance = abs(end_file - start_file)
-    else: # (start_rank == end_rank): # check if E or W, and diagonal (since diagonal distance is calculated the same way)
         distance = abs(end_rank - start_rank)
-    # elif (abs(start_file - end_file) == abs(start_rank - end_rank)): # check for diagonals 
+    else: # (start_rank == end_rank): # check if E or W, and diagonal (since diagonal distance is calculated the same way)
+        distance = abs(end_file - start_file)
+    # elif (abs(start_file - end_file) == abs(start_rank - end_rank)): # check for diagonals
     #     distance = abs(end_rank - start_rank)
 
     return (delta_idx // distance, distance)
 
-def _get_knight_move_dir_and_distance(move: str) -> tuple[int, int]:
+def _get_underpromotion_dir_offset(move: str, turn: bool) -> int:
     """
-    Get the direction and distance of a knight move.
+    Get the underpromotion offset for a pawn move.
     
     Args:
-        move (str): The UCI move string (e.g., "g1f3").
+        move (str): The UCI move string (e.g., "e7e8q").
         
     Returns:
-        tuple: (direction delta, distance) where direction is an index for the knight move direction
-               and distance is always 1 for knight moves.
+        int: The underpromotion offset.
     """
-    
-    start_idx = constants.SQUARE_INDICIES[move[:2]]
-    end_idx = constants.SQUARE_INDICIES[move[2:4]]
 
-    delta_idx = end_idx - start_idx
+    delta_idx = _get_delta_idx(move=move)
 
-    return (delta_idx, 1)  # Knight moves always have a distance of 1
+    if (turn == constants.WHITE):
+        if (delta_idx == 8):
+            return 0
+        elif (delta_idx == 7):
+            return 1
+        else:
+            return 2
+    else:
+        if (delta_idx == -8):
+            return 0
+        elif (delta_idx == -9):
+            return 1
+        else:
+            return 2
+
+
 
 def uci_to_policy_index(uci_str: str, piece: constants.Piece, turn: bool) -> int:
     """
@@ -101,12 +117,117 @@ def uci_to_policy_index(uci_str: str, piece: constants.Piece, turn: bool) -> int
         uci_str (str): The UCI move string (e.g., "e2e4").
         piece (constants.Piece): The piece being moved.
         turn (bool): True if it's white's turn, False if it's black's turn.
+
+    Returns:
+        int: The index for the policy output.
     """
+
+    if (piece == constants.Piece.KNIGHT):
+        delta_idx = _get_delta_idx(uci_str)
+        move_type_idx = QUEEN_MOVE_PLANES + KNIGHT_DIRECTION_MAP[delta_idx]
+    elif (len(uci_str) == 5 and uci_str[4] != 'q'):
+        promotion_piece = constants.PIECE_CHAR_MAP[uci_str[4]]
+        direction_offset = _get_underpromotion_dir_offset(move=uci_str, turn=turn)
+        move_type_idx = QUEEN_MOVE_PLANES + KNIGHT_MOVE_PLANES + (UNDERPROMOTION_MAP[promotion_piece] * 3 + direction_offset) # 3 here represents the amt of direction offset layers per underpromotion
+    else:
+        dir_delta, distance = _get_queen_move_dir_and_distance(uci_str)
+        move_type_idx = QUEEN_DIRECTION_MAP[dir_delta] * 7 + (distance - 1) # 7 represents the amt of possible distances for a given move dir, -1 is to normalize the distance to an index
+        
+    return constants.SQUARE_INDICIES[uci_str[:2]] * TOTAL_MOVE_PLANES + move_type_idx
+
+
+def policy_index_to_uci(policy_index: int, piece: constants.Piece, turn: bool) -> str:
+    """
+    Convert a policy index back to a UCI move string.
+    Args:
+        policy_index (int): The index in the policy output.
+        piece (constants.Piece): The piece being moved.
+        turn (bool): True if it's white's turn, False if it's black's turn (using constants library).
+
+    Returns:
+        str: The UCI move string.
+    """
+
+
+    from_square_idx = policy_index // TOTAL_MOVE_PLANES
+    move_plane_idx = policy_index % TOTAL_MOVE_PLANES
+
+    promotion_char = ""
+
+    if (move_plane_idx > QUEEN_MOVE_PLANES + KNIGHT_MOVE_PLANES - 1):
+        standardized_plane_idx = move_plane_idx - (QUEEN_MOVE_PLANES + KNIGHT_MOVE_PLANES)
+        promotion_piece_idx = standardized_plane_idx // 3
+        direction_offset = standardized_plane_idx % 3 
+
+        inv_underpromotion_map = {value: key for key, value in UNDERPROMOTION_MAP.items()} # switch the keys and values in the UNDERPROMOTION_MAP dict
     
-    if piece == constants.Piece.KNIGHT:
-        direction_delta, distance = _get_knight_move_dir_and_distance(uci_str)
-    elif len(uci_str) == 5 and uci_str[5] != 'q':
-        promotion_piece = constants.PIECE_CHAR_MAP[uci_str[5]]
+        promotion_piece = inv_underpromotion_map[promotion_piece_idx]
+
+        if (promotion_piece == constants.Piece.KNIGHT):
+            promotion_char = "n"
+        elif (promotion_piece == constants.Piece.BISHOP):
+            promotion_char = "b"
+        else:
+            promotion_char = "r"
+
+        if (turn == constants.WHITE):
+            if (direction_offset == 0):
+                delta_idx = 8
+            elif (direction_offset == 1):
+                delta_idx = 7
+            else:
+                delta_idx = 9
+        else:
+            if (direction_offset == 0):
+                delta_idx = -8
+            elif (direction_offset == 1):
+                delta_idx = -9
+            else:
+                delta_idx = -7
+
+    elif (move_plane_idx > QUEEN_MOVE_PLANES - 1):
+        standardized_plane_idx = move_plane_idx - QUEEN_MOVE_PLANES
+
+        inv_knight_map = {value: key for key, value in KNIGHT_DIRECTION_MAP.items()}
+
+        delta_idx = inv_knight_map[standardized_plane_idx]
+
+    else:
+        direction_idx = move_plane_idx // 7
+        distance = (move_plane_idx % 7) + 1
+
+        inv_queen_map = {value: key for key, value in QUEEN_DIRECTION_MAP.items()}
+
+        direction_delta = inv_queen_map[direction_idx]
+
+        delta_idx = direction_delta * distance
+
+        if (piece == constants.Piece.PAWN):
+            from_rank_idx = from_square_idx // 8
+            to_rank_idx = (from_square_idx + delta_idx) // 8
+
+            if (((turn == constants.WHITE) and (from_rank_idx == 6) and (to_rank_idx == 7))
+            or ((turn == constants.BLACK) and (from_rank_idx == 1) and (to_rank_idx == 0))):
+
+                promotion_char = "q"
+
+    to_square_idx = from_square_idx + delta_idx
+
+    from_file_char = chr(from_square_idx % 8 + ord('a'))
+    from_rank_char = chr(from_square_idx // 8 + ord('1'))
+    to_file_char = chr(to_square_idx % 8 + ord('a'))
+    to_rank_char = chr(to_square_idx // 8 + ord('1'))
+
+    return f"{from_file_char}{from_rank_char}{to_file_char}{to_rank_char}{promotion_char}"
+    
+
+
+
+        
+
+
+
+        
 
         
 
