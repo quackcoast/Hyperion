@@ -138,7 +138,7 @@ class ChessDataset(Dataset):
         nn_input_planes_np = fen_parser.fen_to_nn_input(fen_str)
         nn_input_planes = torch.tensor(nn_input_planes_np, dtype=torch.float32)
  
-        policy_idx = move_encoder.uci_to_policy_index(uci_move_str, fen_parser.get_piece_at_square(uci_move_str[:2], fen_str), fen_parser.get_turn(fen_str))
+        policy_idx = move_encoder.uci_to_policy_index(uci_move_str, fen_parser.get_piece_at_square(fen_str, uci_move_str[:2]), fen_parser.get_turn(fen_str))
         policy_target = torch.zeros(64 * constants.TOTAL_OUTPUT_PLANES, dtype=torch.float32)
         
         if 0 <= policy_idx < 64 * constants.TOTAL_OUTPUT_PLANES:
