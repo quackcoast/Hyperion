@@ -3,6 +3,7 @@
 
 import numpy as np
 import hyperion_nn.utils.constants as constants
+import logging
 
 # & Constants:
 
@@ -50,6 +51,8 @@ PIECE_TO_PLANE_MAP = {
 }
 
 MAX_EXP_MOVE = 200  # max number of expected moves for full move clock normalization
+
+logger = logging.getLogger(__name__)
 
 def fen_to_nn_input(fen: str) -> np.ndarray: 
     """
