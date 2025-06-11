@@ -104,7 +104,7 @@ def fen_to_nn_input(fen: str) -> np.ndarray:
     
     # ! process en passant target square (layer 17; 1.0 for the square, 0.0 for others)
     if en_passant != '-':
-        print(f"En passant square: {en_passant}")
+        logger.debug(f"En passant square: {en_passant}")
         file_idx = ord(en_passant[0]) - ord('a')  # convert file letter to index (0-7)
         rank_idx = int(en_passant[1]) - 1  # convert rank number to index (0-7)
         nn_input[EN_PASSANT_PLANE, rank_idx, file_idx] = 1.0
