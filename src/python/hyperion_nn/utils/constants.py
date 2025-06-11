@@ -1,5 +1,7 @@
 from enum import IntEnum
 
+# && Constants for chess game representation &&
+
 class Piece(IntEnum):
     """
     Enum for the pieces in a chess game.
@@ -34,3 +36,9 @@ PIECE_CHAR_MAP = {
     'k': Piece.KING,
     '.': Piece.EMPTY
 }
+
+# && Constants for neural network I/O &&
+
+TOTAL_INPUT_PLANES = 20  # Total number of planes in the neural network input
+TOTAL_POLICY_OUTPUT_PLANES = 72  # Total number of planes in the neural network output
+TOTAL_POLICY_HEAD_SIZE = 64 * TOTAL_POLICY_OUTPUT_PLANES  # Size of the policy head in the neural network
