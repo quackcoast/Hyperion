@@ -106,8 +106,8 @@ class ChessDataset(Dataset):
 
 
         if not self.offsets:
-            logger.error("Offsets not calculated. Please run _calculate_ans_save_offsets() first.")
-            raise RuntimeError("Offsets not calculated. Please run _calculate_ans_save_offsets() first.")
+            logger.error("Offsets not calculated. Please run _calculate_and_save_offsets() first.")
+            raise RuntimeError("Offsets not calculated. Please run _calculate_and_save_offsets() first.")
         
         if idx < 0 or idx >= len(self.offsets):
             logger.error(f"Index {idx} out of bounds for dataset of length {len(self.offsets)}.")
