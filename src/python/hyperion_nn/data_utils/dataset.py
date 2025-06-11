@@ -106,8 +106,8 @@ class ChessDataset(Dataset):
 
 
         if not self.offsets:
-            logger.error("Offsets not calculated. Please run _calculate_ans_save_offsets() first.")
-            raise RuntimeError("Offsets not calculated. Please run _calculate_ans_save_offsets() first.")
+            logger.error("Offsets not calculated. Please run _calculate_and_save_offsets() first.")
+            raise RuntimeError("Offsets not calculated. Please run _calculate_and_save_offsets() first.")
         
         if idx < 0 or idx >= len(self.offsets):
             logger.error(f"Index {idx} out of bounds for dataset of length {len(self.offsets)}.")
@@ -138,7 +138,7 @@ class ChessDataset(Dataset):
         nn_input_planes_np = fen_parser.fen_to_nn_input(fen_str)
         nn_input_planes = torch.tensor(nn_input_planes_np, dtype=torch.float32)
  
-        policy_idx = move_encoder.uci_to_policy_index(uci_move_str, fen_parser.get_piece_at_square(uci_move_str[:2], fen_str), fen_parser.get_turn(fen_str))
+        policy_idx = move_encoder.uci_to_policy_index(uci_move_str, fen_parser.get_piece_at_square(fen_str, uci_move_str[:2]), fen_parser.get_turn(fen_str))
         policy_target = torch.zeros(64 * constants.TOTAL_OUTPUT_PLANES, dtype=torch.float32)
         
         if 0 <= policy_idx < 64 * constants.TOTAL_OUTPUT_PLANES:

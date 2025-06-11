@@ -11,6 +11,6 @@ import hyperion_nn.config as config
 
 logging.basicConfig(level=logging.INFO, 
                     format="%(asctime)s [%(name)-35s] [%(levelname)-8s] %(message)s",
-                    handlers=[logging.FileHandler(os.path.join(config.PathsConfig.LOGS_DIR), "training.log"), logging.StreamHandler(sys.stdout)])
+                    handlers=[logging.FileHandler(os.path.join(config.PathsConfig.LOGS_DIR, "training.log")), logging.StreamHandler(sys.stdout)])
 
 logger = logging.getLogger(__name__)
