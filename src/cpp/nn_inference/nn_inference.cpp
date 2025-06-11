@@ -1,1 +1,0 @@
-// these files will eventually be used for inference on the trained neural network using ONNX

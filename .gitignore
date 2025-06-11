@@ -1,13 +1,4 @@
-.vscode/
-/data/raw/games-2024.csv
-*.egg-info/
-__pycache__
-build/
-.VSCodeCounter/
-.pytest_cache/
-.VSCodeCounter
-
- CMake generated files and directories
+# CMake generated files and directories
 build/
 CMakeCache.txt
 CMakeFiles/
