@@ -42,8 +42,8 @@ UNDERPROMOTION_MAP = {
 
 def _get_delta_idx(move: str) -> int:
 
-    start_idx = constants.SQUARE_INDICIES[move[:2]]
-    end_idx = constants.SQUARE_INDICIES[move[2:4]]
+    start_idx = constants.SQUARE_INDICES[move[:2]]
+    end_idx = constants.SQUARE_INDICES[move[2:4]]
 
     return end_idx - start_idx
 
@@ -60,8 +60,8 @@ def _get_queen_move_dir_and_distance(move: str) -> tuple[int, int]:
                and distance is the number of squares moved.
     """
 
-    start_idx = constants.SQUARE_INDICIES[move[:2]]
-    end_idx = constants.SQUARE_INDICIES[move[2:4]]
+    start_idx = constants.SQUARE_INDICES[move[:2]]
+    end_idx = constants.SQUARE_INDICES[move[2:4]]
 
     delta_idx = end_idx - start_idx
 
@@ -133,7 +133,7 @@ def uci_to_policy_index(uci_str: str, piece: constants.Piece, turn: bool) -> int
         dir_delta, distance = _get_queen_move_dir_and_distance(uci_str)
         move_type_idx = QUEEN_DIRECTION_MAP[dir_delta] * 7 + (distance - 1) # 7 represents the amt of possible distances for a given move dir, -1 is to normalize the distance to an index
         
-    return constants.SQUARE_INDICIES[uci_str[:2]] * TOTAL_MOVE_PLANES + move_type_idx
+    return constants.SQUARE_INDICES[uci_str[:2]] * TOTAL_MOVE_PLANES + move_type_idx
 
 
 def policy_index_to_uci(policy_index: int, piece: constants.Piece, turn: bool) -> str:

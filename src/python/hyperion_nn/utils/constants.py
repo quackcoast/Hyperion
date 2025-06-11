@@ -19,7 +19,7 @@ BLACK = False
 
 _square_names = [f"{file}{rank}" for rank in "12345678" for file in "abcdefgh"]
 
-SQUARE_INDICIES = IntEnum('SQUARES', _square_names, start=0)
+SQUARE_INDICES = IntEnum('SQUARES', _square_names, start=0)
 
 PIECE_CHAR_MAP = {
     'P': Piece.PAWN,
