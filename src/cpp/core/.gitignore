@@ -1,19 +1,10 @@
-.vscode/
-/data/raw/games-2024.csv
-*.egg-info/
-__pycache__
-build/
-.VSCodeCounter/
-.pytest_cache/
-.VSCodeCounter
-
- CMake generated files and directories
+# CMake generated files and directories
 build/
 CMakeCache.txt
 CMakeFiles/
 cmake_install.cmake
 CTestTestfile.cmake
-Makefile # If top-level Makefiles are generated, though usually inside build/
+Makefile
 
 # Compiled Object files
 *.o
@@ -35,7 +26,7 @@ Makefile # If top-level Makefiles are generated, though usually inside build/
 *.out
 *.app
 
-# IDE-specific files (optional, but good practice)
+# IDE-specific files
 .vscode/
 .idea/
 *.suo
