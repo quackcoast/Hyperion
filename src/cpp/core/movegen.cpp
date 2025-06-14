@@ -3,6 +3,7 @@
 #include "bitboard.hpp"  
 #include "position.hpp" 
 #include "move.hpp"
+#include <memory>
 
 namespace hyperion {
 namespace core {
@@ -11,7 +12,65 @@ MoveGenerator::MoveGenerator() {
     return;
 }
 
+
+void MoveGenerator::generate_legal_puzzle_moves(const Position& pos, std::vector<Move>& legal_move_list) {
+    // 1. Generate all pseudo-legal moves into a TEMPORARY list.
+    std::vector<Move> pseudo_legal_moves;
+    generate_pseudo_legal_moves(pos, pseudo_legal_moves);
+
+    // 2. Clear the final output list.
+    legal_move_list.clear();
+
+    // Allocate the temporary position on the HEAP, not the stack.
+    // This creates a copy of 'pos' in heap memory.
+    std::unique_ptr<Position> temp_pos = std::make_unique<Position>(pos);
+    
+    int player_making_move = pos.get_side_to_move();
+
+    // 4. Iterate over the pseudo-legal list.
+    for (const Move& move : pseudo_legal_moves) {
+        // Use the '->' operator to access members of an object managed by a pointer.
+        temp_pos->make_move(move);
+
+        if (!temp_pos->is_king_in_check(player_making_move)) {
+            legal_move_list.push_back(move);
+        }
+
+        temp_pos->unmake_move(move);
+    }
+}
 // --- Primary Move Generation Function ---
+// NEW GENERATE LEGAL MOVES, calls puseodo legal moves which should be faster ( i think)
+
+void MoveGenerator::generate_legal_moves(const Position& pos, std::vector<Move>& legal_move_list) {
+    // 1. Generate all pseudo-legal moves into a temporary list.
+    std::vector<Move> pseudo_legal_moves;
+    generate_pseudo_legal_moves(pos, pseudo_legal_moves);
+
+    // 2. Clear the output list before we fill it with truly legal moves.
+    legal_move_list.clear();
+
+    // 3. For each pseudo-legal move, check if it's legal.
+    int player_making_move = pos.get_side_to_move();
+    Position temp_pos = pos; // Create one temporary position to reuse.
+
+    for (const Move& move : pseudo_legal_moves) {
+        // Apply the move to the temporary position.
+        temp_pos.make_move(move);
+
+        // Check if the king of the player who made the move is now in check.
+        // If the king is NOT in check, the move is legal.
+        if (!temp_pos.is_king_in_check(player_making_move)) {
+            legal_move_list.push_back(move);
+        }
+
+        // Unmake the move to restore the temp_pos for the next iteration.
+        temp_pos.unmake_move(move);
+    }
+}
+
+/*
+//OLD GENERATE_LEGAL_MOVES
 void MoveGenerator::generate_legal_moves(const Position& pos, std::vector<Move>& legal_move_list) {
     legal_move_list.clear(); // Ensuring the list is empty before filling
 
@@ -82,6 +141,7 @@ void MoveGenerator::generate_legal_moves(const Position& pos, std::vector<Move>&
         // After unmake_move, temp_checking_pos should be identical to the original `pos`.
     }
 }
+*/
 //--- pusedo move generation ---
 void MoveGenerator::generate_pseudo_legal_moves(const Position& pos, std::vector<Move>& pseudo_legal_move_list) {
     pseudo_legal_move_list.clear();

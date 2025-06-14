@@ -15,6 +15,7 @@ public:
     // --- Primary Move Generation Function ---
     // Generates all legal moves for the side to move in the given position.
     // The generated moves are added to the 'move_list'.
+    void generate_legal_puzzle_moves(const Position& pos, std::vector<Move>& move_list);
     
     void generate_legal_moves(const Position& pos, std::vector<Move>& move_list);
      // --- Pseudo-Legal Move Generation ---

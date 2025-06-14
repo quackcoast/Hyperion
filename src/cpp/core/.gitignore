@@ -6,6 +6,7 @@ cmake_install.cmake
 CTestTestfile.cmake
 Makefile
 
+lichess_puzzle_eval
 # Compiled Object files
 *.o
 *.obj

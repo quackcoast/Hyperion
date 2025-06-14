@@ -8,6 +8,7 @@
 #include <string>   
 #include <iostream>
 #include <cassert>
+#include <array>
 
 namespace hyperion {
 namespace core {   

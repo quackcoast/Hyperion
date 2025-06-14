@@ -42,7 +42,7 @@ void uci_loop() {
         iss >> token;
 
         if (token == "uci") {
-            std::cout << "id name Hyperion 0.0.0-beta" << std::endl;
+            std::cout << "id name Hyperion 0.1.0-beta" << std::endl;
             std::cout << "id author Tom and LJ" << std::endl;
             std::cout << "uciok" << std::endl;
         } 

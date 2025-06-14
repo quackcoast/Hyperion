@@ -5,6 +5,7 @@
 #include <immintrin.h> // Required for _pext_u64 <-- comments about this use below
 #include <algorithm>
 #include <vector>
+#include <cstdint>
 
 /*The _pext_u64 (Parallel Bit Extract) instruction is part of the BMI2 instruction set available on modern x86 CPUs. 
 It's highly effective for magic bitboard implementations because it can directly map the bits of occupied squares

@@ -155,6 +155,12 @@ target_include_directories(TestMovegen PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src/c
 target_link_libraries(TestMovegen PRIVATE EngineCore)
 target_compile_options(TestMovegen PRIVATE -Ofast)
 
+add_executable(TestPuzzles src/cpp/core/test_puzzle.cpp)
+
+target_include_directories(TestPuzzles PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src/cpp)
+target_link_libraries(TestPuzzles PRIVATE EngineSearch)
+target_compile_options(TestPuzzles PRIVATE -O3)
+
 # --- Future NN Library Integration (Placeholder) ---
 # When you integrate ONNX Runtime or another NN library:
 # 1. Find the package:
