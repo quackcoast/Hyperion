@@ -11,9 +11,14 @@
 namespace hyperion {
 namespace engine {
 
+// ======================================================================================
+// ======================================================================================
+// ====================UNCOMENT BELOW FOR MCTS WITH STATIC EVALUATION====================
+// ======================================================================================
+// ======================================================================================
 // For fun I Will add a temporary static evaluation to see how good I can make this. a lot of this will be refactored but hey, the source code is on github so who cares if I cange it
 // Static evaluation for fun:
-
+/*
 // --- Piece Values ---
 constexpr int PAWN_VALUE   = 100;
 constexpr int KNIGHT_VALUE = 320;
@@ -59,6 +64,7 @@ const int* piece_square_tables[] = {
     queen_pst,
     king_pst
 };
+*/
 //--
 /* static_evaluate */
 //--
@@ -70,6 +76,7 @@ const int* piece_square_tables[] = {
 // The final score is returned from the perspective of the side to move, a common
 // practice in negamax-style search algorithms. This means a positive score is always
 // advantageous for the current player.
+/*
 double static_evaluate(const core::Position& pos) {
     int score = 0;
     
@@ -106,7 +113,7 @@ double static_evaluate(const core::Position& pos) {
     // If it's Black's turn, a positive score is good for White, so its bad for Black (-score).
     return (pos.get_side_to_move() == WHITE) ? static_cast<double>(score) : -static_cast<double>(score);
 }
-
+*/
 //--
 /* limited_depth_playout */
 //--
@@ -119,6 +126,7 @@ double static_evaluate(const core::Position& pos) {
 // its depth limit, it calls `static_evaluate` on the final position. The result is
 // then normalized to a value between -1.0 and 1.0 using `std::tanh`, making it
 // suitable for use in a Monte Carlo Tree Search (MCTS) algorithm.
+/*
 double limited_depth_playout(core::Position position, std::mt19937& gen) {
     core::MoveGenerator move_gen;
     std::vector<core::Move> move_list;
@@ -166,8 +174,13 @@ double limited_depth_playout(core::Position position, std::mt19937& gen) {
     // tanh is a great function for this. We scale the score so that +/- 3 pawns is a near certain win/loss.
     return std::tanh(final_score / (PAWN_VALUE * 3.0));
 }
+*/
+// ======================================================================================
+// ======================================================================================
+// ====================UNCOMENT ABOVE FOR MCTS WITH STATIC EVALUATION====================
+// ======================================================================================
+// ======================================================================================
 
-// NOTE: THIS WILL BE COMPLETLY REWORKED ONCE WE HAVE A WORKING NN TO EVALUATE THE POS
 
 //--
 /* random_playout */
@@ -178,7 +191,6 @@ double limited_depth_playout(core::Position position, std::mt19937& gen) {
     //  position: The board state from which the random playout will begin. It is passed by value to avoid modifying the original
     //  gen: A reference to a Mersenne Twister random number generator for selecting moves
     // The result of the game from the perspective of the starting player: 1.0 for a win, -1.0 for a loss, and 0.0 for a draw
-    /*
 double random_playout(core::Position position, std::mt19937& gen) {
     core::MoveGenerator move_gen;
     std::vector<core::Move> move_list;
@@ -220,7 +232,7 @@ double random_playout(core::Position position, std::mt19937& gen) {
     }
     // This line is un reachable as the loop only terminates via a return, but it prevents compiler warnings
     return 0.0;
-}*/
+}
 
 } // namespace engine
 } // namespace hyperion

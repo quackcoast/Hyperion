@@ -1,14 +1,16 @@
 #include "search.hpp"
 #include "eval.hpp"
 #include "../core/movegen.hpp"
-
 #include <chrono>
 #include <cmath>
 #include <limits>
 #include <iostream>
 
-namespace hyperion {
+namespace hyperion { 
 namespace engine {
+
+// Ive included both the tracitional MCTS and a hand crafted evalutation MCTS. THe handcrafted evaluation is a side project, but it is effective at seeing
+// what a traditional nn-mcts would get. I did include the handcrafted evaluation below. You much just comment / uncomment everything shown below
 
 // UCT exploration constant. Higher values favor exploring lessvisited nodes
 constexpr double UCT_C = 1.414; // sqrt(2)
@@ -16,7 +18,7 @@ constexpr double UCT_C = 1.414; // sqrt(2)
 // you kinda just need to try around these values and see what works
 // to be honest ive changed this number so much and it is SUPPOSED to do something, but doesnt really do much :/
 // possible bug maybe?
-//constexpr double UCT_C = .6; // number I pulled out of my ass
+// constexpr double UCT_C = .6; // number I pulled out of my ass
 
 
 //--
@@ -51,14 +53,6 @@ core::Move Search::find_best_move(core::Position& root_pos, int time_limit_ms) {
 
     // --- Main MCTS Loop ---
     // The loop continues until the time limit is exceeded
-    /*
-    while (true) {
-        auto now = std::chrono::steady_clock::now();
-        auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - start_time).count();
-        if (elapsed >= time_limit_ms) {
-            break;
-        }
-            */
     while (true) {
         auto now = std::chrono::steady_clock::now();
         if (std::chrono::duration_cast<std::chrono::milliseconds>(now - start_time).count() >= time_limit_ms) {
@@ -72,7 +66,62 @@ core::Move Search::find_best_move(core::Position& root_pos, int time_limit_ms) {
         // 1. Selection: Traverse the tree to find a promising leaf node
         Node* node = select(root_node.get(), search_pos);
         // 2. Expansion: Add a new child to the selected node
-        /*node = expand(node, search_pos);*/
+        node = expand(node, search_pos);
+        // 2. Expansion
+        /*
+        if (!is_terminal(search_pos)) { // Only expand if not a terminal node
+            node = expand(node, search_pos);
+        }
+        */
+        // 3. Simulation: Run a random playout from the new node
+        double result = simulate(search_pos);
+        // 4. Backpropagation: Update node statistics back up the tree
+        backpropagate(node, result);
+        
+        iterations++;
+    }
+    
+    // Output search statistics
+    std::cout << "info depth " << iterations << " nodes " << tt.size() << std::endl;
+
+    // After the search, determine the best move from the root
+    return get_best_move_from_root();
+}
+// ======================================================================================
+// ======================================================================================
+// ====================UNCOMENT BELOW FOR MCTS WITH STATIC EVALUATION====================
+// ======================================================================================
+// ======================================================================================
+/*
+core::Move Search::find_best_move(core::Position& root_pos, int time_limit_ms) {
+    // --- Setup ---
+    // Initialize the search tree with a root node
+    root_node = std::make_unique<Node>();
+    
+    // Clear the transposition table from any previous search
+    tt.clear();
+    // Store the root node in the transposition table
+    tt.store(root_pos.current_hash, root_node.get());
+
+    auto start_time = std::chrono::steady_clock::now();
+    int iterations = 0;
+
+    // --- Main MCTS Loop ---
+    // The loop continues until the time limit is exceeded
+    while (true) {
+        auto now = std::chrono::steady_clock::now();
+        if (std::chrono::duration_cast<std::chrono::milliseconds>(now - start_time).count() >= time_limit_ms) {
+            break;
+        }
+
+        // Create a copy of the position to modify during this iteration's traversal
+        core::Position search_pos = root_pos; 
+        
+        // MCTS consists of four main phases per iteration:
+        // 1. Selection: Traverse the tree to find a promising leaf node
+        Node* node = select(root_node.get(), search_pos);
+        // 2. Expansion: Add a new child to the selected node
+        node = expand(node, search_pos);
         // 2. Expansion
         if (!is_terminal(search_pos)) { // Only expand if not a terminal node
             node = expand(node, search_pos);
@@ -91,6 +140,12 @@ core::Move Search::find_best_move(core::Position& root_pos, int time_limit_ms) {
     // After the search, determine the best move from the root
     return get_best_move_from_root();
 }
+// ======================================================================================
+// ======================================================================================
+// ====================UNCOMENT ABOVE FOR MCTS WITH STATIC EVALUATION====================
+// ======================================================================================
+// ======================================================================================
+
 //--
 /* Search::select */
 //--
@@ -101,11 +156,8 @@ core::Move Search::find_best_move(core::Position& root_pos, int time_limit_ms) {
     //  pos: The board position, which is updated as the selection traverses the tree
     // A pointer to the selected leaf Node
 Node* Search::select(Node* node, core::Position& pos) {
-    /*
     core::MoveGenerator move_gen;
     std::vector<core::Move> legal_moves;
-    */
-   /*
     while (true) {
         move_gen.generate_legal_moves(pos, legal_moves);
 
@@ -140,7 +192,13 @@ Node* Search::select(Node* node, core::Position& pos) {
         // Clear the move list for the next iteration
         legal_moves.clear();
         
-    }*/
+    }
+    // ======================================================================================
+    // ======================================================================================
+    // ====================UNCOMENT BELOW FOR MCTS WITH STATIC EVALUATION====================
+    // ======================================================================================
+    // ======================================================================================
+}/*
      while (true) {
         // If the node is not fully expanded, we must expand it first. Selection ends.
         if (!node->is_fully_expanded()) {
@@ -174,8 +232,21 @@ Node* Search::select(Node* node, core::Position& pos) {
         node = best_child;
     }
 }
+// ======================================================================================
+// ======================================================================================
+// ====================UNCOMENT ABOVE FOR MCTS WITH STATIC EVALUATION====================
+// ======================================================================================
+// ======================================================================================
+
+// ======================================================================================
+// ======================================================================================
+// ====================UNCOMENT BELOW FOR MCTS WITH STATIC EVALUATION====================
+// ======================================================================================
+// ======================================================================================
+
+*/
 //--
-/* Search::expand */
+// Search::expand
 //--
 // Performs the expansion phase of MCTS
 // If the given node is not terminal, it adds one new child node to it,
@@ -183,6 +254,7 @@ Node* Search::select(Node* node, core::Position& pos) {
     //  node: The leaf node to expand
     //  pos: The board position corresponding to the leaf node
     // A pointer to the newly created child node. If the node is terminal, returns the original node
+/*
 Node* Search::expand(Node* node, core::Position& pos) {
     // Generate moves for this node IF they haven't been generated yet.
     if (!node->moves_generated) {
@@ -216,7 +288,12 @@ Node* Search::expand(Node* node, core::Position& pos) {
     // This can happen if the node is terminal (no legal moves).
     return node;
 }
-/*
+*/
+// ======================================================================================
+// ======================================================================================
+// ====================UNCOMENT ABOVE FOR MCTS WITH STATIC EVALUATION====================
+// ======================================================================================
+// ======================================================================================
 Node* Search::expand(Node* node, core::Position& pos) {
     core::MoveGenerator move_gen;
     std::vector<core::Move> legal_moves;
@@ -243,7 +320,11 @@ Node* Search::expand(Node* node, core::Position& pos) {
     // Return the newly created node for the simulation phase
     return new_child;
 }
-*/
+// ======================================================================================
+// ======================================================================================
+// ====================UNCOMENT BELOW FOR MCTS WITH STATIC EVALUATION====================
+// ======================================================================================
+// ======================================================================================
 //--
 /* Search::simulate */
 //--
@@ -251,22 +332,35 @@ Node* Search::expand(Node* node, core::Position& pos) {
 // From the given position, it plays a random game to its conclusion
     //  pos: The starting position for the simulation
     // The result of the game from the perspective of the current player (+1 for win, -1 loss, 0 draw)
+/*
 double Search::simulate(core::Position& pos) {
     core::Position sim_pos = pos;
     return limited_depth_playout(sim_pos, this->random_generator);
 }
-/*
+*/
+// ======================================================================================
+// ======================================================================================
+// ====================UNCOMENT ABOVE FOR MCTS WITH STATIC EVALUATION====================
+// ======================================================================================
+// ======================================================================================
+
 double Search::simulate(core::Position& pos) {
     // Delegate the simulation to a random playout function
     return random_playout(pos, this->random_generator);
 }
-*/
+
+// ======================================================================================
+// ======================================================================================
+// ====================UNCOMENT BELOW FOR MCTS WITH STATIC EVALUATION====================
+// ======================================================================================
+// ======================================================================================
 //--
 /* Search::backpropagate */
 //--
 // Performs the backpropagation phase of MCTS
 // It updates the visit counts and outcome statistics of all nodes from the simulation's start node up to the root
 //  result The result of the simulation
+/*
 void Search::backpropagate(Node* node, double result) {
     while (node != nullptr) {
         // Atomically increment the visit count (this is fine for integers)
@@ -290,7 +384,12 @@ void Search::backpropagate(Node* node, double result) {
         node = node->parent;
     }
 }
-    /*
+    */
+// ======================================================================================
+// ======================================================================================
+// ====================UNCOMENT ABVOE FOR MCTS WITH STATIC EVALUATION====================
+// ======================================================================================
+// ======================================================================================
 void Search::backpropagate(Node* node, double result) {
     // The simulation result is from the perspective of the player who just moved to 'node'
     // We traverse up the tree to the root
@@ -305,10 +404,15 @@ void Search::backpropagate(Node* node, double result) {
         node = node->parent;
     }
 }
-*/
+// ======================================================================================
+// ======================================================================================
+// ====================UNCOMENT BELOW FOR MCTS WITH STATIC EVALUATION====================
+// ======================================================================================
+// ======================================================================================
 //--
 /* Search::uct_score */
 //--
+/*
 double Search::uct_score(const Node* node, int parent_visits) const {
     if (node->visits == 0) {
         return std::numeric_limits<double>::infinity();
@@ -324,12 +428,22 @@ double Search::uct_score(const Node* node, int parent_visits) const {
     
     return exploitation_term + exploration_term;
 }
+*/
+// ======================================================================================
+// ======================================================================================
+// ====================UNCOMENT ABOVE FOR MCTS WITH STATIC EVALUATION====================
+// ======================================================================================
+// ======================================================================================
+
+//--
+/* Search::uct_score */
+//--
 // Calculates the UCT (Upper Confidence Bound for Trees) score for a given node
 // This score balances exploitation (choosing known good moves) and exploration (trying new moves)
     //  node: The child node for which to calculate the score
     //  parent_visits: The number of times the parent of 'node' has been visited
     // The calculated UCT score as a double
-/*
+
 double Search::uct_score(const Node* node, int parent_visits) const {
     // If a node has not been visited, prioritize it by giving it an infinite score
     if (node->visits == 0) {
@@ -344,7 +458,6 @@ double Search::uct_score(const Node* node, int parent_visits) const {
     // The node's value is already stored from the parent's perspective, so no negation is needed here
     return q_value + u_value;
 }
-*/
 //--
 /* Search::get_best_move_from_root */
 //--
@@ -369,6 +482,12 @@ core::Move Search::get_best_move_from_root() {
     }
     return best_move;
 }
+// ======================================================================================
+// ======================================================================================
+// ====================UNCOMENT BELOW FOR MCTS WITH STATIC EVALUATION====================
+// ======================================================================================
+// ======================================================================================
+/*
 // herlper function to check for terminal nodes in the search
 bool Search::is_terminal(core::Position& pos) {
     core::MoveGenerator move_gen;
@@ -376,6 +495,11 @@ bool Search::is_terminal(core::Position& pos) {
     move_gen.generate_legal_moves(pos, legal_moves);
     return legal_moves.empty() || pos.halfmove_clock >= 100;
 }
-
+*/
+// ======================================================================================
+// ======================================================================================
+// ====================UNCOMENT ABOVE FOR MCTS WITH STATIC EVALUATION====================
+// ======================================================================================
+// ======================================================================================
 } // namespace engine
 } // namespace hyperion
