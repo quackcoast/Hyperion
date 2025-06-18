@@ -94,7 +94,7 @@ def train_model():
         loss_policy = policy_loss_fn(policy_logits, policy_loss_indices)
 
         value_prediction = torch.tanh(value_output)
-        loss_value = value_loss_fn(value_prediction, value_target)
+        loss_value = value_loss_fn(value_prediction, value_target.unsqueeze(1))
 
         total_loss = loss_policy + loss_value
 
