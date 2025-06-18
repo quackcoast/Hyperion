@@ -113,24 +113,24 @@ class ChessDataset(Dataset):
             logger.error(f"Index {idx} out of bounds for dataset of length {len(self.offsets)}.")
             raise IndexError(f"Index {idx} out of bounds for dataset of length {len(self.offsets)}.")
         
-        targer_offset = self.offsets[idx]
+        target_offset = self.offsets[idx]
 
         try:
             with open(self.csv_file_path, 'rb') as f:
-                f.seek(targer_offset)
+                f.seek(target_offset)
                 line_str = f.readline().decode('utf-8').strip()
 
         except FileNotFoundError:
             logger.error(f"CSV file {self.csv_file_path} not found. Please check the path.")
             raise RuntimeError(f"CSV file {self.csv_file_path} not found. Please check the path.")
         except Exception as e:
-            logger.error(f"Failed to read line at offset {targer_offset}: {e}")
-            raise RuntimeError(f"Failed to read line at offset {targer_offset}: {e}")
+            logger.error(f"Failed to read line at offset {target_offset}: {e}")
+            raise RuntimeError(f"Failed to read line at offset {target_offset}: {e}")
         
         line_items = line_str.split(',')
         if len(line_items) != 3:
-            logger.error(f"Invalid line format at offset {targer_offset}: {line_str}")
-            raise ValueError(f"Invalid line format at offset {targer_offset}: {line_str}")
+            logger.error(f"Invalid line format at offset {target_offset}: {line_str}")
+            raise ValueError(f"Invalid line format at offset {target_offset}: {line_str}")
         
         fen_str, uci_move_str, game_outcome_str = line_items
         game_outcome = int(game_outcome_str)
@@ -139,9 +139,9 @@ class ChessDataset(Dataset):
         nn_input_planes = torch.tensor(nn_input_planes_np, dtype=torch.float32)
  
         policy_idx = move_encoder.uci_to_policy_index(uci_move_str, fen_parser.get_piece_at_square(fen_str, uci_move_str[:2]), fen_parser.get_turn(fen_str))
-        policy_target = torch.zeros(64 * constants.TOTAL_OUTPUT_PLANES, dtype=torch.float32)
+        policy_target = torch.zeros(64 * config.ModelConfig.TOTAL_OUTPUT_PLANES, dtype=torch.float32)
         
-        if 0 <= policy_idx < 64 * constants.TOTAL_OUTPUT_PLANES:
+        if 0 <= policy_idx < 64 * config.ModelConfig.TOTAL_OUTPUT_PLANES:
             policy_target[policy_idx] = 1.0
         else:
             logger.error(f"Policy index {policy_idx} out of bounds for UCI move {uci_move_str} in FEN {fen_str} at sample {idx}.")

@@ -130,9 +130,12 @@ def uci_to_policy_index(uci_str: str, piece: constants.Piece, turn: bool) -> int
         direction_offset = _get_underpromotion_dir_offset(move=uci_str, turn=turn)
         move_type_idx = QUEEN_MOVE_PLANES + KNIGHT_MOVE_PLANES + (UNDERPROMOTION_MAP[promotion_piece] * 3 + direction_offset) # 3 here represents the amt of direction offset layers per underpromotion
     else:
-        dir_delta, distance = _get_queen_move_dir_and_distance(uci_str)
-        move_type_idx = QUEEN_DIRECTION_MAP[dir_delta] * 7 + (distance - 1) # 7 represents the amt of possible distances for a given move dir, -1 is to normalize the distance to an index
-        
+        try:
+            dir_delta, distance = _get_queen_move_dir_and_distance(uci_str)
+            move_type_idx = QUEEN_DIRECTION_MAP[dir_delta] * 7 + (distance - 1) # 7 represents the amt of possible distances for a given move dir, -1 is to normalize the distance to an index
+        except KeyError:
+
+            raise ValueError(f"""Invalid UCI move string: {uci_str}. The move direction is not recognized. \n[DEBUG] Move direction delta: {dir_delta}, distance: {distance}, piece: {piece}, turn: {turn}""")
     return constants.SQUARE_INDICES[uci_str[:2]] * TOTAL_MOVE_PLANES + move_type_idx
 
 

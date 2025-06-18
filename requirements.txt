@@ -1,0 +1,15 @@
+# HYPERION/requirements.txt
+
+# --- PyTorch GPU Installation ---
+# This file is the source of truth for installing dependencies for this project.
+# The --index-url points to the official PyTorch download server for CUDA 12.1 builds.
+--index-url https://download.pytorch.org/whl/cu121
+
+torch
+torchvision
+torchaudio
+
+# --- Other Project Dependencies ---
+# These are the same dependencies from pyproject.toml
+numpy>=1.21.0
+pandas>=2.0.0

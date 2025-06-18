@@ -122,36 +122,7 @@ def fen_to_nn_input(fen: str) -> np.ndarray:
 
     return nn_input
 
-def get_piece_at_square(fen_str: str, square: str) -> constants.Piece | None:
-    """
-    Get the piece at a specific square from a FEN string.
-    
-    Args:
-        fen_str (str): The FEN string representing the chess position.
-        square (str): The square in algebraic notation (e.g., 'e4').
-        
-    Returns:
-        constants.Piece | None: The piece at the square, or None if empty.
-    """
-    # Convert square to row and column indices
-    col = ord(square[0]) - ord('a')  # 'a' -> 0, 'b' -> 1, ..., 'h' -> 7
-    row = int(square[1]) - 1  # '1' -> 0, '2' -> 1, ..., '8' -> 7
 
-    # Parse the FEN string
-    pieces = fen_str.split(" ")[0]
-    rank_strs = pieces.split("/")
-    target_rank = rank_strs[7 - row]  # FEN ranks are from 8 to 1, so we reverse the order
-
-    # find the piece at the specified column
-    col_count = 0
-    for char in target_rank:
-        if char.isdigit():
-            col_count += int(char)
-        else:
-            if col_count == col:
-                return constants.PIECE_CHAR_MAP[char]
-            
-    return None  # If we reach here, the square is empty or invalid
 
 def get_turn(fen_str: str) -> constants.Piece:
     """
