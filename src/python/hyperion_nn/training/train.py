@@ -35,7 +35,7 @@ root_logger.addHandler(file_handler)
 console_handler = logging.StreamHandler(sys.stdout)
 # Set a higher level for the console. WARNING means it will only print messages
 # that are warnings, errors, or critical. INFO and DEBUG messages will be ignored.
-console_handler.setLevel(logging.WARNING) 
+console_handler.setLevel(logging.DEBUG) 
 console_formatter = logging.Formatter("[%(levelname)-8s] %(message)s")
 console_handler.setFormatter(console_formatter)
 root_logger.addHandler(console_handler)
