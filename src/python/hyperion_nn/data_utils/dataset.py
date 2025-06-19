@@ -147,8 +147,8 @@ class ChessDataset(Dataset):
             logger.error(f"Policy index {policy_idx} out of bounds for UCI move {uci_move_str} in FEN {fen_str} at sample {idx}.")
             raise ValueError(f"Policy index {policy_idx} out of bounds for UCI move {uci_move_str} in FEN {fen_str} at sample {idx}.")
 
-        value_target = torch.tensor(float(game_outcome), dtype=torch.float32)
-
+        value_target = torch.tensor([float(game_outcome)], dtype=torch.float32)
+        
         return nn_input_planes, policy_target, value_target
 
                 

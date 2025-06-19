@@ -159,20 +159,17 @@ def fen_to_nn_input(fen: str) -> np.ndarray:
     return nn_input
 
 
-def get_turn(fen_str: str) -> str:
+def get_turn(fen_str: str) -> bool:
     """
     Get the color to move from a FEN string.
     
-    Args:
-        fen_str (str): The FEN string representing the chess position.
-        
     Returns:
-        str: The color to move ('w' for White or 'b' for Black).
+        bool: True if it is White's turn, False if it is Black's turn.
     """
     try:
         color_to_move = fen_str.split(" ")[1]
         if color_to_move not in ('w', 'b'):
             raise ValueError(f"Invalid turn indicator '{color_to_move}' in FEN.")
-        return color_to_move
+        return color_to_move == 'w'
     except IndexError:
         raise ValueError(f"Invalid FEN string: cannot parse turn from '{fen_str}'")

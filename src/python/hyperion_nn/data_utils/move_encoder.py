@@ -111,14 +111,14 @@ def _get_underpromotion_dir_offset(move: str, turn: bool) -> int:
 
 # In src/python/hyperion_nn/data_utils/move_encoder.py
 
-def uci_to_policy_index(uci_str: str, piece_char: str, turn_char: str) -> int:
+def uci_to_policy_index(uci_str: str, piece_char: str, is_white_turn: bool) -> int:
     """
     Convert a UCI move string into an index for the policy output.
     
     Args:
         uci_str (str): The UCI move string (e.g., "e2e4").
         piece_char (str): The piece being moved, as a single character (e.g., 'n', 'P', 'q').
-        turn_char (str): 'w' for white's turn, 'b' for black's turn.
+        turn_char (bool): 'true' for white's turn, 'false' for black's turn.
 
     Returns:
         int: The index for the policy output.
@@ -146,7 +146,6 @@ def uci_to_policy_index(uci_str: str, piece_char: str, turn_char: str) -> int:
             elif promotion_char == 'b': promotion_piece_enum = constants.Piece.BISHOP
             else: promotion_piece_enum = constants.Piece.ROOK
 
-        is_white_turn = (turn_char == 'w')
         direction_offset = _get_underpromotion_dir_offset(move=uci_str, turn=is_white_turn)
         
         move_type_idx = (QUEEN_MOVE_PLANES + KNIGHT_MOVE_PLANES + 
@@ -162,7 +161,7 @@ def uci_to_policy_index(uci_str: str, piece_char: str, turn_char: str) -> int:
             dir_delta_val, distance_val = _get_queen_move_dir_and_distance(uci_str)
             raise ValueError(f"Invalid queen-like move for UCI {uci_str}. "
                              f"Direction delta {dir_delta_val} not in QUEEN_DIRECTION_MAP. "
-                             f"Piece: {piece_char}, Turn: {turn_char}")
+                             f"Piece: {piece_char}, Turn: {is_white_turn}")
 
     # Final calculation of policy index based on starting square and move type.
     start_square_index = constants.SQUARE_INDICES[uci_str[:2]]
@@ -170,7 +169,7 @@ def uci_to_policy_index(uci_str: str, piece_char: str, turn_char: str) -> int:
     
     if not (0 <= policy_idx < POLICY_HEAD_SIZE):
         raise ValueError(f"Calculated policy index {policy_idx} is out of bounds [0, {POLICY_HEAD_SIZE-1}].\n"
-                         f"[DEBUG] UCI: {uci_str}, Piece: {piece_char}, Turn: {turn_char}, "
+                         f"[DEBUG] UCI: {uci_str}, Piece: {piece_char}, Turn: {is_white_turn}, "
                          f"Start Square Idx: {start_square_index}, Move Type Idx: {move_type_idx}")
 
     return policy_idx
