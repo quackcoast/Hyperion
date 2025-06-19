@@ -4,9 +4,6 @@
 # - storing some path directories
 # - NN input/output dimensions
 
-
-# pip install tqdm <-- possible thing to install for timing...
-
 import torch
 import os
 import math
