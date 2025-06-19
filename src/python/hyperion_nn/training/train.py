@@ -16,6 +16,7 @@ import hyperion_nn.config as config
 from hyperion_nn.data_utils.dataset import ChessDataset
 from hyperion_nn.models.resnet_cnn import HyperionNN
 from torch.utils.data import DataLoader
+import hyperion_nn.utils.constants as constants
 
 
 # 1. Get the root logger. This is the master logger that all others inherit from.
@@ -34,8 +35,8 @@ root_logger.addHandler(file_handler)
 # 3. Create the console handler. This handler prints messages to the console
 console_handler = logging.StreamHandler(sys.stdout)
 # Set a higher level for the console. WARNING means it will only print messages
-# that are warnings, errors, or critical. INFO and DEBUG messages will be ignored.
-console_handler.setLevel(logging.DEBUG) 
+# that are warnings, errors, or critical. INFO messages will be ignored.
+console_handler.setLevel(logging.WARNING) 
 console_formatter = logging.Formatter("[%(levelname)-8s] %(message)s")
 console_handler.setFormatter(console_formatter)
 root_logger.addHandler(console_handler)
@@ -49,6 +50,10 @@ def train_model():
     logger.info("Starting training process...")
     device = config.HardwareBasedConfig.DEVICE
     logger.info(f"Using device: {device}")
+
+    steps_log_dir = os.path.join("data", "steps")
+    os.makedirs(steps_log_dir, exist_ok=True)
+    steps_log_file = os.path.join(steps_log_dir, "step_log.txt")
 
     # 1) model initialization
     logger.info("Initializing model and optimizer...")
@@ -96,34 +101,7 @@ def train_model():
     steps_per_epoch = len(training_dataloader)
     total_epochs = (config.TrainingConfig.TOTAL_TARGET_TRAINING_STEPS // steps_per_epoch) + 1
 
-    print(r"""
-    +-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-+
-    |                                                                           |@ @ @ @ @ @ @ @ @ @ @ @ @ @ @ @ @ @ @ @ @ @ @ @|
-    |                                                                           |@ @ @ @ @ @ @ @ = + + + + + * @ @ @ @ @ @ @ @ @|
-    | /$$   /$$                                         /$$                     |@ @ @ @ @ @ @ @ @ + + + + + + * @ @ @ + + + @ @|
-    || $$  | $$                                        |__/                     |@ @ @ @ @ @ @ @ @ @ @ + + @ @ @ + + + + + + @ @|
-    || $$  | $$ /$$   /$$  /$$$$$$   /$$$$$$   /$$$$$$  /$$  /$$$$$$  /$$$$$$$  |@ @ @ @ @ @ @ @ @ @ @ @ @ = + + + + + + + + @ @|
-    || $$$$$$$$| $$  | $$ /$$__  $$ /$$__  $$ /$$__  $$| $$ /$$__  $$| $$__  $$ |@ @ @ @ @ @ @ @ @ @ = = = = = + + @ @ + + @ @ @|
-    || $$__  $$| $$  | $$| $$  \ $$| $$$$$$$$| $$  \__/| $$| $$  \ $$| $$  \ $$ |@ @ @ @ @ @ @ @ = = = = = = = @ @ . @ + + @ @ @|
-    || $$  | $$| $$  | $$| $$  | $$| $$_____/| $$      | $$| $$  | $$| $$  | $$ |@ @ @ @ @ @ = = = = = = = @ @ . : @ + + + @ @ @|
-    || $$  | $$|  $$$$$$$| $$$$$$$/|  $$$$$$$| $$      | $$|  $$$$$$/| $$  | $$ |@ @ @ @ @ @ @ @ @ @ = @ @ . . . - @ + + @ * @ @|
-    ||__/  |__/ \____  $$| $$____/  \_______/|__/      |__/ \______/ |__/  |__/ |@ @ @ @ @ @ @ @ @ @ @ @ . . . - @ = = + @ + + @|
-    |           /$$  | $$| $$                                                   |@ @ @ @ @ @ - = @ @ @ . . . - - @ = = = @ + + @|
-    |          |  $$$$$$/| $$                                                   |@ @ @ @ @ @ @ @ @ @ . . . - - @ = = = @ + + + @|
-    |           \______/ |__/                                                   |@ @ @ @ @ @ @ @ @ . . . - - @ @ = = = @ + + + @|
-    |   /$$                        /$$           /$$                            |@ @ @ @ @ @ @ @ . . . - - @ @ = = = = @ @ + + @|
-    |  | $$                       |__/          |__/                            |@ @ @ @ @ @ @ . . . - - @ @ @ @ = = @ @ @ + + @|
-    | /$$$$$$    /$$$$$$  /$$$$$$  /$$ /$$$$$$$  /$$ /$$$$$$$   /$$$$$$         |@ @ @ @ @ @ @ . - - - @ @ @ @ @ = = @ @ @ @ + @|
-    ||_  $$_/   /$$__  $$|____  $$| $$| $$__  $$| $$| $$__  $$ /$$__  $$        |@ @ @ - @ @ - - - - @ @ @ = @ @ = @ @ @ @ @ @ @|
-    |  | $$    | $$  \__/ /$$$$$$$| $$| $$  \ $$| $$| $$  \ $$| $$  \ $$        |@ @ @ - - - - - @ @ @ @ @ - @ @ = @ @ @ @ @ @ @|
-    |  | $$ /$$| $$      /$$__  $$| $$| $$  | $$| $$| $$  | $$| $$  | $$        |@ @ @ @ - = - @ @ @ @ @ @ @ @ @ @ @ @ @ @ @ @ @|
-    |  |  $$$$/| $$     |  $$$$$$$| $$| $$  | $$| $$| $$  | $$|  $$$$$$$        |@ @ @ * * + + @ @ @ @ @ @ @ @ @ @ @ @ @ @ @ @ @|
-    |   \___/  |__/      \_______/|__/|__/  |__/|__/|__/  |__/ \____  $$        |@ @ * * * @ + + @ @ @ @ @ @ @ @ @ @ @ @ @ @ @ @|
-    |                                                          /$$  \ $$        |@ * * * @ @ @ @ @ @ @ @ @ @ @ @ @ @ @ @ @ @ @ @|
-    |                                                         |  $$$$$$/        |@ @ * @ @ @ @ @ @ @ @ @ @ @ @ @ @ @ @ @ @ @ @ @|
-    |                                                          \______/         |@ @ @ @ @ @ @ @ @ @ @ @ @ @ @ @ @ @ @ @ @ @ @ @|
-    +-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-+
-    """)
+    print(constants.TRAINING_HEADER_ART) 
 
     for epoch in range(start_epoch, total_epochs):
         # Create a tqdm progress bar for the current epoch
@@ -155,7 +133,9 @@ def train_model():
             progress_bar.set_postfix(loss=f"{total_loss.item():.4f}", step=global_step)
 
             if global_step % config.TrainingConfig.LOG_EVERY_N_STEPS == 0:
-                logger.info(f"Step [{global_step}/{config.TrainingConfig.TOTAL_TARGET_TRAINING_STEPS}], Loss: {total_loss.item():.4f}")
+                log_message = f"Step [{global_step}/{config.TrainingConfig.TOTAL_TARGET_TRAINING_STEPS}], Loss: {total_loss.item():.4f}"
+                with open(steps_log_file, 'a') as f:
+                    f.write(log_message + '\n')
 
             if global_step % config.TrainingConfig.VALIDATE_EVERY_N_STEPS == 0:
                 # TODO: Implement the validation logic here

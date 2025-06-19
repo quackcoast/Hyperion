@@ -8,7 +8,6 @@ import torch
 import os
 import math
 
-
 class PathsConfig:
 
     ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
@@ -51,7 +50,7 @@ class TrainingConfig:
 
     # ~~ Logging/Checkpointing ~~
     SAVE_CHECKPOINTS_EVERY_N_STEPS = 10_000  # save a checkpoint every N training steps
-    VALIDATE_EVERY_N_STEPS = 50_000
+    VALIDATE_EVERY_N_STEPS = VALIDATE_EVERY_N_STEPS = 5 * SAVE_CHECKPOINTS_EVERY_N_STEPS
     LOG_EVERY_N_STEPS = 1  # log training progress every N training steps
 
     # validate the model every N training steps
