@@ -8,6 +8,7 @@
 torch
 torchvision
 torchaudio
+tqdm
 
 # --- Other Project Dependencies ---
 # These are the same dependencies from pyproject.toml
