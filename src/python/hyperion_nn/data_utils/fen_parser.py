@@ -54,6 +54,42 @@ MAX_EXP_MOVE = 200  # max number of expected moves for full move clock normaliza
 
 logger = logging.getLogger(__name__)
 
+def get_piece_at_square(fen: str, square: str) -> str | None:
+    """
+    Given a FEN string and a square in algebraic notation (e.g., 'e4'),
+    returns the piece character on that square ('P', 'n', etc.).
+    Returns None if the square is empty.
+    """
+    piece_placement = fen.split(' ')[0]
+    ranks = piece_placement.split('/')
+
+    try:
+        file = ord(square[0]) - ord('a') # a=0, b=1, ... h=7
+        rank = 8 - int(square[1])      # 1=7, 2=6, ... 8=0
+    except (ValueError, IndexError):
+        raise ValueError(f"Invalid square notation: {square}")
+
+    if not (0 <= file < 8 and 0 <= rank < 8):
+        raise ValueError(f"Square out of bounds: {square}")
+
+    target_rank_str = ranks[rank]
+    
+    current_file = 0
+    for char in target_rank_str:
+        if char.isdigit():
+            empty_squares = int(char)
+            if current_file <= file < current_file + empty_squares:
+                # The target square is one of the empty squares
+                return None
+            current_file += empty_squares
+        else:
+            # A letter indicates a piece
+            if current_file == file:
+                return char
+            current_file += 1
+            
+    return None # Should not be reached if FEN is valid and square is in bounds
+
 def fen_to_nn_input(fen: str) -> np.ndarray: 
     """
     Convert a FEN string to a tensor representation.
@@ -122,46 +158,18 @@ def fen_to_nn_input(fen: str) -> np.ndarray:
 
     return nn_input
 
-def get_piece_at_square(fen_str: str, square: str) -> constants.Piece | None:
-    """
-    Get the piece at a specific square from a FEN string.
-    
-    Args:
-        fen_str (str): The FEN string representing the chess position.
-        square (str): The square in algebraic notation (e.g., 'e4').
-        
-    Returns:
-        constants.Piece | None: The piece at the square, or None if empty.
-    """
-    # Convert square to row and column indices
-    col = ord(square[0]) - ord('a')  # 'a' -> 0, 'b' -> 1, ..., 'h' -> 7
-    row = int(square[1]) - 1  # '1' -> 0, '2' -> 1, ..., '8' -> 7
 
-    # Parse the FEN string
-    pieces = fen_str.split(" ")[0]
-    rank_strs = pieces.split("/")
-    target_rank = rank_strs[7 - row]  # FEN ranks are from 8 to 1, so we reverse the order
-
-    # find the piece at the specified column
-    col_count = 0
-    for char in target_rank:
-        if char.isdigit():
-            col_count += int(char)
-        else:
-            if col_count == col:
-                return constants.PIECE_CHAR_MAP[char]
-            
-    return None  # If we reach here, the square is empty or invalid
-
-def get_turn(fen_str: str) -> constants.Piece:
+def get_turn(fen_str: str) -> bool:
     """
     Get the color to move from a FEN string.
     
-    Args:
-        fen_str (str): The FEN string representing the chess position.
-        
     Returns:
-        constants.Piece: The color to move (WHITE or BLACK).
+        bool: True if it is White's turn, False if it is Black's turn.
     """
-    color_to_move = fen_str.split(" ")[1]
-    return constants.WHITE if color_to_move == 'w' else constants.BLACK
+    try:
+        color_to_move = fen_str.split(" ")[1]
+        if color_to_move not in ('w', 'b'):
+            raise ValueError(f"Invalid turn indicator '{color_to_move}' in FEN.")
+        return color_to_move == 'w'
+    except IndexError:
+        raise ValueError(f"Invalid FEN string: cannot parse turn from '{fen_str}'")
