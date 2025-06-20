@@ -139,16 +139,16 @@ class ChessDataset(Dataset):
         nn_input_planes = torch.tensor(nn_input_planes_np, dtype=torch.float32)
  
         policy_idx = move_encoder.uci_to_policy_index(uci_move_str, fen_parser.get_piece_at_square(fen_str, uci_move_str[:2]), fen_parser.get_turn(fen_str))
-        policy_target = torch.zeros(64 * config.ModelConfig.TOTAL_OUTPUT_PLANES, dtype=torch.float32)
+        policy_target = np.zeros(move_encoder.POLICY_HEAD_SIZE, dtype=np.float32)
         
-        if 0 <= policy_idx < 64 * config.ModelConfig.TOTAL_OUTPUT_PLANES:
+        if 0 <= policy_idx < move_encoder.POLICY_HEAD_SIZE:
             policy_target[policy_idx] = 1.0
         else:
             logger.error(f"Policy index {policy_idx} out of bounds for UCI move {uci_move_str} in FEN {fen_str} at sample {idx}.")
             raise ValueError(f"Policy index {policy_idx} out of bounds for UCI move {uci_move_str} in FEN {fen_str} at sample {idx}.")
 
-        value_target = torch.tensor(float(game_outcome), dtype=torch.float32)
-
+        value_target = torch.tensor([float(game_outcome)], dtype=torch.float32)
+        
         return nn_input_planes, policy_target, value_target
 
                 

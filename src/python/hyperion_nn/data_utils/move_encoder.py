@@ -109,34 +109,70 @@ def _get_underpromotion_dir_offset(move: str, turn: bool) -> int:
 
 
 
-def uci_to_policy_index(uci_str: str, piece: constants.Piece, turn: bool) -> int:
+# In src/python/hyperion_nn/data_utils/move_encoder.py
+
+def uci_to_policy_index(uci_str: str, piece_char: str, is_white_turn: bool) -> int:
     """
     Convert a UCI move string into an index for the policy output.
     
     Args:
         uci_str (str): The UCI move string (e.g., "e2e4").
-        piece (constants.Piece): The piece being moved.
-        turn (bool): True if it's white's turn, False if it's black's turn.
+        piece_char (str): The piece being moved, as a single character (e.g., 'n', 'P', 'q').
+        turn_char (bool): 'true' for white's turn, 'false' for black's turn.
 
     Returns:
         int: The index for the policy output.
     """
-
-    if (piece == constants.Piece.KNIGHT):
+    # The piece argument is now a character string like 'n', 'P', et c
+    # check its lowercase version to handle both 'N' and 'n' as knights.
+    if piece_char and piece_char.lower() == 'n':
         delta_idx = _get_delta_idx(uci_str)
-        move_type_idx = QUEEN_MOVE_PLANES + KNIGHT_DIRECTION_MAP[delta_idx]
-    elif (len(uci_str) == 5 and uci_str[4] != 'q'):
-        promotion_piece = constants.PIECE_CHAR_MAP[uci_str[4]]
-        direction_offset = _get_underpromotion_dir_offset(move=uci_str, turn=turn)
-        move_type_idx = QUEEN_MOVE_PLANES + KNIGHT_MOVE_PLANES + (UNDERPROMOTION_MAP[promotion_piece] * 3 + direction_offset) # 3 here represents the amt of direction offset layers per underpromotion
+        try:
+            # Knight moves start after queen moves
+            move_type_idx = QUEEN_MOVE_PLANES + KNIGHT_DIRECTION_MAP[delta_idx]
+        except KeyError:
+            # This can happen if the knight move is illegal or the map is incomplete
+            raise ValueError(f"Invalid knight move for UCI {uci_str}. Delta {delta_idx} not in KNIGHT_DIRECTION_MAP.")
+    
+    # Check for underpromotions (e.g., 'e7e8n', 'a1b1r')
+    elif len(uci_str) == 5 and uci_str[4] in 'nbr':
+        # Get the promotion piece character from the UCI string
+        promotion_char = uci_str[4]
+        # Map the character to your constants.Piece enum to use with UNDERPROMOTION_MAP
+        try:
+            promotion_piece_enum = constants.PIECE_CHAR_MAP[promotion_char]
+        except (AttributeError, KeyError):
+            if promotion_char == 'n': promotion_piece_enum = constants.Piece.KNIGHT
+            elif promotion_char == 'b': promotion_piece_enum = constants.Piece.BISHOP
+            else: promotion_piece_enum = constants.Piece.ROOK
+
+        direction_offset = _get_underpromotion_dir_offset(move=uci_str, turn=is_white_turn)
+        
+        move_type_idx = (QUEEN_MOVE_PLANES + KNIGHT_MOVE_PLANES + 
+                         (UNDERPROMOTION_MAP[promotion_piece_enum] * 3 + direction_offset))
+
+    # All other moves (queen, rook, bishop, pawn, king moves)
     else:
         try:
             dir_delta, distance = _get_queen_move_dir_and_distance(uci_str)
-            move_type_idx = QUEEN_DIRECTION_MAP[dir_delta] * 7 + (distance - 1) # 7 represents the amt of possible distances for a given move dir, -1 is to normalize the distance to an index
+            # Queen-like moves are at the beginning of the move planes
+            move_type_idx = QUEEN_DIRECTION_MAP[dir_delta] * 7 + (distance - 1)
         except KeyError:
+            dir_delta_val, distance_val = _get_queen_move_dir_and_distance(uci_str)
+            raise ValueError(f"Invalid queen-like move for UCI {uci_str}. "
+                             f"Direction delta {dir_delta_val} not in QUEEN_DIRECTION_MAP. "
+                             f"Piece: {piece_char}, Turn: {is_white_turn}")
 
-            raise ValueError(f"""Invalid UCI move string: {uci_str}. The move direction is not recognized. \n[DEBUG] Move direction delta: {dir_delta}, distance: {distance}, piece: {piece}, turn: {turn}""")
-    return constants.SQUARE_INDICES[uci_str[:2]] * TOTAL_MOVE_PLANES + move_type_idx
+    # Final calculation of policy index based on starting square and move type.
+    start_square_index = constants.SQUARE_INDICES[uci_str[:2]]
+    policy_idx = start_square_index * TOTAL_MOVE_PLANES + move_type_idx
+    
+    if not (0 <= policy_idx < POLICY_HEAD_SIZE):
+        raise ValueError(f"Calculated policy index {policy_idx} is out of bounds [0, {POLICY_HEAD_SIZE-1}].\n"
+                         f"[DEBUG] UCI: {uci_str}, Piece: {piece_char}, Turn: {is_white_turn}, "
+                         f"Start Square Idx: {start_square_index}, Move Type Idx: {move_type_idx}")
+
+    return policy_idx
 
 
 def policy_index_to_uci(policy_index: int, piece: constants.Piece, turn: bool) -> str:

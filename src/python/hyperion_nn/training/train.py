@@ -10,16 +10,36 @@ import os
 import torch
 import torch.optim as optim
 import glob
-import itertools
+from tqdm import tqdm
 
 import hyperion_nn.config as config
 from hyperion_nn.data_utils.dataset import ChessDataset
 from hyperion_nn.models.resnet_cnn import HyperionNN
 from torch.utils.data import DataLoader
+import hyperion_nn.utils.constants as constants
 
-logging.basicConfig(level=logging.INFO, 
-                    format="%(asctime)s [%(name)-30s] [%(levelname)-8s] %(message)s",
-                    handlers=[logging.FileHandler(os.path.join(config.PathsConfig.LOGS_DIR, "training.log")), logging.StreamHandler(sys.stdout)])
+
+# 1. Get the root logger. This is the master logger that all others inherit from.
+
+root_logger = logging.getLogger()
+root_logger.setLevel(logging.INFO)
+
+# 2. Create the file handler. This handler writes messages to your log file.
+log_file_path = os.path.join(config.PathsConfig.LOGS_DIR, "training.log")
+file_handler = logging.FileHandler(log_file_path, mode='a') # 'a' for append
+file_handler.setLevel(logging.INFO) # Log everything of level INFO and above to the file.
+file_formatter = logging.Formatter("%(asctime)s [%(name)-30s] [%(levelname)-8s] %(message)s")
+file_handler.setFormatter(file_formatter)
+root_logger.addHandler(file_handler)
+
+# 3. Create the console handler. This handler prints messages to the console
+console_handler = logging.StreamHandler(sys.stdout)
+# Set a higher level for the console. WARNING means it will only print messages
+# that are warnings, errors, or critical. INFO messages will be ignored.
+console_handler.setLevel(logging.WARNING) 
+console_formatter = logging.Formatter("[%(levelname)-8s] %(message)s")
+console_handler.setFormatter(console_formatter)
+root_logger.addHandler(console_handler)
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +51,10 @@ def train_model():
     device = config.HardwareBasedConfig.DEVICE
     logger.info(f"Using device: {device}")
 
+    steps_log_dir = os.path.join("data", "steps")
+    os.makedirs(steps_log_dir, exist_ok=True)
+    steps_log_file = os.path.join(steps_log_dir, "step_log.txt")
+
     # 1) model initialization
     logger.info("Initializing model and optimizer...")
     model = HyperionNN().to(device)
@@ -40,6 +64,7 @@ def train_model():
     
     # 2) checkpoint loading
     global_step = 0
+    start_epoch = 0
     checkpoint_dir = config.PathsConfig.CHECKPOINT_DIR
     if os.path.exists(checkpoint_dir):
         checkpoints_list = glob.glob(os.path.join(checkpoint_dir, "checkpoint_step_*.pt"))
@@ -50,7 +75,8 @@ def train_model():
             model.load_state_dict(checkpoint['model_state_dict'])
             optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
             global_step = checkpoint['global_step']
-            logger.info(f"Checkpoint loaded. Resuming from step {global_step}.")
+            start_epoch = checkpoint.get('epoch', 0)
+            logger.info(f"Checkpoint loaded. Resuming from step {global_step} (Epoch {start_epoch}).")
         else:
             logger.warning("No checkpoints found. Starting training from scratch.")
 
@@ -61,9 +87,8 @@ def train_model():
         batch_size=config.HardwareBasedConfig.BATCH_SIZE,
         shuffle=True,
         num_workers=config.HardwareBasedConfig.NUM_WORKERS,
-        pin_memory=True, # Pin memory for faster data transfer to GPU
+        pin_memory=True,
     )
-    data_iterator = iter(itertools.cycle(training_dataloader))  # Cycle through the dataset indefinitely
 
     # 4) init loss functions
     policy_loss_fn = torch.nn.CrossEntropyLoss()
@@ -72,56 +97,70 @@ def train_model():
     # 5) main training loop
     logger.info(f"Starting training loop at step {global_step}...")
     model.train()
-    while global_step < config.TrainingConfig.TOTAL_TARGET_TRAINING_STEPS:
-        try:
-            input_planes, policy_target, value_target = next(data_iterator)
-        except StopIteration:
-            logger.info("End of dataset reached. Restarting from the beginning.")
-            data_iterator = iter(itertools.cycle(training_dataloader))
-            input_planes, policy_target, value_target = next(data_iterator)
-            continue
+    
+    steps_per_epoch = len(training_dataloader)
+    total_epochs = (config.TrainingConfig.TOTAL_TARGET_TRAINING_STEPS // steps_per_epoch) + 1
+
+    print(constants.TRAINING_HEADER_ART) 
+
+    for epoch in range(start_epoch, total_epochs):
+        # Create a tqdm progress bar for the current epoch
+        progress_bar = tqdm(training_dataloader, desc=f"Epoch {epoch+1}/{total_epochs}", leave=True)
         
-        input_planes = input_planes.to(device)
-        policy_target = policy_target.to(device)
-        value_target = value_target.to(device)
+        for batch in progress_bar:
+            input_planes, policy_target, value_target = batch
+            
+            input_planes = input_planes.to(device)
+            policy_target = policy_target.to(device)
+            value_target = value_target.to(device)
+            
+            optimizer.zero_grad()
+            policy_logits, value_output = model(input_planes)
+
+            # calculate losses
+            policy_loss_indices = torch.argmax(policy_target, dim=1)
+            loss_policy = policy_loss_fn(policy_logits, policy_loss_indices)
+            value_prediction = torch.tanh(value_output)
+            loss_value = value_loss_fn(value_prediction, value_target)
+            total_loss = loss_policy + loss_value
+
+            # backpropagation
+            total_loss.backward()
+            optimizer.step()
+            global_step += 1
+
+            # Update the progress bar with the latest loss information
+            progress_bar.set_postfix(loss=f"{total_loss.item():.4f}", step=global_step)
+
+            if global_step % config.TrainingConfig.LOG_EVERY_N_STEPS == 0:
+                log_message = f"Step [{global_step}/{config.TrainingConfig.TOTAL_TARGET_TRAINING_STEPS}], Loss: {total_loss.item():.4f}"
+                with open(steps_log_file, 'a') as f:
+                    f.write(log_message + '\n')
+
+            if global_step % config.TrainingConfig.VALIDATE_EVERY_N_STEPS == 0:
+                # TODO: Implement the validation logic here
+                model.train()
+
+            if global_step % config.TrainingConfig.SAVE_CHECKPOINTS_EVERY_N_STEPS == 0:
+                checkpoint_name = f"checkpoint_step_{global_step}.pt"
+                # Make sure the checkpoint path exists and is correct
+                checkpoint_path = os.path.join(config.PathsConfig.CHECKPOINT_DIR, checkpoint_name)
+                torch.save({
+                    'global_step': global_step,
+                    'epoch': epoch,
+                    'model_state_dict': model.state_dict(),
+                    'optimizer_state_dict': optimizer.state_dict(),
+                    'loss': total_loss.item(),
+                }, f=checkpoint_path)
+                logger.info(f"Checkpoint saved to {checkpoint_path}")
+
+            # Exit condition if we reach the target number of steps mid-epoch
+            if global_step >= config.TrainingConfig.TOTAL_TARGET_TRAINING_STEPS:
+                break
         
-        optimizer.zero_grad()
-
-        policy_logits, value_output = model(input_planes)
-
-        # calculate losses
-        policy_loss_indices = torch.argmax(policy_target, dim=1)
-        loss_policy = policy_loss_fn(policy_logits, policy_loss_indices)
-
-        value_prediction = torch.tanh(value_output)
-        loss_value = value_loss_fn(value_prediction, value_target)
-
-        total_loss = loss_policy + loss_value
-
-        # backpropagation
-        total_loss.backward()
-        optimizer.step()
-        global_step += 1
-
-        # logging
-        if global_step % config.TrainingConfig.LOG_EVERY_N_STEPS == 0:
-            print(f"Step [{global_step}/{config.TrainingConfig.TOTAL_TARGET_TRAINING_STEPS}], Loss: {total_loss.item():.4f}")
-        
-        if global_step % config.VALIDATE_EVERY_N_STEPS == 0:
-            # TODO: Implement the validation logic here
-            # validation_loss, validation_accuracy = evaluate(model, validation_loader, device)
-            # print(f"--- Validation at Step {global_step}, Val Loss: {validation_loss:.4f} ---")
-            model.train() # Switch back to training mode after evaluation
-
-        if global_step % config.SAVE_CHECKPOINT_EVERY_N_STEPS == 0:
-            checkpoint_name = f"checkpoint_step_{global_step}.pt"
-            torch.save({
-                'global_step': global_step,
-                'model_state_dict': model.state_dict(),
-                'optimizer_state_dict': optimizer.state_dict(),
-                'loss': total_loss.item(),
-            }, f=os.path.join(config.CHECKPOINT_PATH, checkpoint_name))
-            print(f"Checkpoint saved at step {global_step}")
+        # Another check to break the outer loop
+        if global_step >= config.TrainingConfig.TOTAL_TARGET_TRAINING_STEPS:
+            break
 
     logger.info("Training completed successfully.")
 
@@ -129,7 +168,3 @@ def train_model():
 if __name__ == "__main__":
     train_model()
     logger.info("Training script finished.")
-
-
-
-
