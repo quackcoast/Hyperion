@@ -14,8 +14,10 @@ class PathsConfig:
     DATA_DIR = os.path.join(ROOT_DIR, 'data')
     
 
-    RAW_TRAINING_DATA_DIR = os.path.join(DATA_DIR, 'raw')
-    PROCESSED_TRAINING_DATA_DIR = os.path.join(DATA_DIR, 'processed')
+    RAW_TRAINING_DATA_DIR = os.path.join(DATA_DIR, 'raw-games')
+    PROCESSED_TRAINING_DATA_DIR = os.path.join(DATA_DIR, 'processed-games')
+    RAW_VALIDATION_DATA_DIR = os.path.join(DATA_DIR, 'raw-vali-games')
+    PROCESSED_VALIDATION_DATA_DIR = os.path.join(DATA_DIR, 'processed-vali-games')
 
     MODELS_DIR = os.path.join(DATA_DIR, 'models')
     CHECKPOINT_DIR = os.path.join(MODELS_DIR, 'checkpoints')
@@ -26,9 +28,9 @@ class PathsConfig:
 class HardwareBasedConfig:
 
     # ! IMPORTANT: these is ARBITRARY and should be changed to match the actual hardware capabilities (vram, gpu, etc.)
-    BATCH_SIZE = 256 #256 
+    BATCH_SIZE = 512 #256 
 
-    NUM_WORKERS = 4
+    NUM_WORKERS = 16
     # was 8 i lowered it even tho ik its for the cpu part in the begginging^
     
     DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")    
@@ -38,7 +40,7 @@ class TrainingConfig:
     # ~~ Training hyperparameters ~~
     LEARNING_RATE = 0.001  # how far the "steps" are in the gradient descent algorithm, just trust me that this is the right value
 
-    TOTAL_SAMPLES_TO_TRAIN = 150_000_000  # total number of samples to train on, this is ARBITRARY and should be changed later
+    TOTAL_SAMPLES_TO_TRAIN = 700_000_000  # total number of samples to train on, this is ARBITRARY and should be changed later
     
     TOTAL_TARGET_TRAINING_STEPS = TOTAL_SAMPLES_TO_TRAIN // HardwareBasedConfig.BATCH_SIZE + 1  # total number of training steps, this is ARBITRARY and should be changed later
 
@@ -49,9 +51,12 @@ class TrainingConfig:
     VALIDATION_SPLIT = 0.02  # 2% of the data will be used for validation
 
     # ~~ Logging/Checkpointing ~~
-    SAVE_CHECKPOINTS_EVERY_N_STEPS = 10_000  # save a checkpoint every N training steps
+    SAVE_CHECKPOINTS_EVERY_N_STEPS = 20_000  # save a checkpoint every N training steps
     VALIDATE_EVERY_N_STEPS = VALIDATE_EVERY_N_STEPS = 5 * SAVE_CHECKPOINTS_EVERY_N_STEPS
-    LOG_EVERY_N_STEPS = 1  # log training progress every N training steps
+    LOG_EVERY_N_STEPS = 1_000  # log training progress every N training steps
+
+    # ~~ LMDB Sharding ~~
+    COMMIT_INTERVAL = 10_000  # commit to the LMDB database every N samples processed
 
     # validate the model every N training steps
     # IMPORTANT: this is ARBITRARY and should be researched more, though it seems to be not that complicated
@@ -79,7 +84,7 @@ class ModelConfig:
     #             |  8b x 128f |
     #
     NUM_RESIDUAL_BLOCKS = 12
-    NUM_FILTERS = 128
+    NUM_FILTERS = 96
 
     POLICY_HEAD_SIZE = 64 * 73  # 64 squares * 73 possible moves (including underpromotions)
 

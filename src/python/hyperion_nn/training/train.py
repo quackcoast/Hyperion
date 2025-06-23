@@ -15,7 +15,7 @@ from tqdm import tqdm
 import hyperion_nn.config as config
 from hyperion_nn.data_utils.dataset import ChessDataset
 from hyperion_nn.models.resnet_cnn import HyperionNN
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, ConcatDataset
 import hyperion_nn.utils.constants as constants
 
 
@@ -36,7 +36,7 @@ root_logger.addHandler(file_handler)
 console_handler = logging.StreamHandler(sys.stdout)
 # Set a higher level for the console. WARNING means it will only print messages
 # that are warnings, errors, or critical. INFO messages will be ignored.
-console_handler.setLevel(logging.WARNING) 
+console_handler.setLevel(logging.DEBUG) 
 console_formatter = logging.Formatter("[%(levelname)-8s] %(message)s")
 console_handler.setFormatter(console_formatter)
 root_logger.addHandler(console_handler)
@@ -55,6 +55,16 @@ def train_model():
     os.makedirs(steps_log_dir, exist_ok=True)
     steps_log_file = os.path.join(steps_log_dir, "step_log.txt")
 
+    # 0) create necessary directories
+    os.makedirs(config.PathsConfig.DATA_DIR, exist_ok=True)
+    os.makedirs(config.PathsConfig.MODELS_DIR, exist_ok=True)
+    os.makedirs(config.PathsConfig.CHECKPOINT_DIR, exist_ok=True)
+    os.makedirs(config.PathsConfig.RAW_TRAINING_DATA_DIR, exist_ok=True)
+    os.makedirs(config.PathsConfig.RAW_VALIDATION_DATA_DIR, exist_ok=True)
+    os.makedirs(config.PathsConfig.PROCESSED_TRAINING_DATA_DIR, exist_ok=True)
+    os.makedirs(config.PathsConfig.PROCESSED_VALIDATION_DATA_DIR, exist_ok=True)
+    os.makedirs(config.PathsConfig.LOGS_DIR, exist_ok=True)
+    
     # 1) model initialization
     logger.info("Initializing model and optimizer...")
     model = HyperionNN().to(device)
@@ -71,7 +81,7 @@ def train_model():
         if checkpoints_list:
             latest_checkpoint_path = max(checkpoints_list, key=os.path.getctime)
             logger.info(f"Loading checkpoint from {latest_checkpoint_path}")
-            checkpoint = torch.load(latest_checkpoint_path, map_location=device)
+            checkpoint = torch.load(latest_checkpoint_path, map_location=device, weights_only=True)
             model.load_state_dict(checkpoint['model_state_dict'])
             optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
             global_step = checkpoint['global_step']
@@ -81,13 +91,42 @@ def train_model():
             logger.warning("No checkpoints found. Starting training from scratch.")
 
     # 3) load data
-    training_dataset = ChessDataset()
+    csv_files = glob.glob(os.path.join(config.PathsConfig.RAW_TRAINING_DATA_DIR, "*.csv"))
+    csv_files = [os.path.relpath(file, config.PathsConfig.RAW_TRAINING_DATA_DIR) for file in csv_files]
+
+    lmdb_files = [f for f in glob.glob(os.path.join(config.PathsConfig.PROCESSED_TRAINING_DATA_DIR, "*.lmdb")) 
+                  if not f.endswith('.lmdb-lock')]
+    lmdb_files = [os.path.relpath(file, config.PathsConfig.PROCESSED_TRAINING_DATA_DIR) for file in lmdb_files]
+
+    csv_file_names_set = set([os.path.splitext(os.path.basename(file))[0] for file in csv_files])
+    lmdb_file_names_set = set([os.path.splitext(os.path.basename(file))[0] for file in lmdb_files])
+    logger.info(f"CSV files found: {csv_file_names_set} LMDB files found: {lmdb_file_names_set}")
+    logger.info(f"CSV not set: {csv_files} LMDB not set: {lmdb_files}")
+
+    missing_lmdb_files = csv_file_names_set - lmdb_file_names_set
+    logger.info(f"Missing LMDB files for CSVs: {missing_lmdb_files}")
+
+    datasets = []
+    for missing_lmdb in missing_lmdb_files:
+        logger.info(f"Missing LMDB shard for {missing_lmdb}, creating it now...")
+        corresponding_csv = f"{missing_lmdb}.csv"
+        logger.info(f"corresponding_csv: {corresponding_csv}")
+        logger.info(f"LMDB shard for {corresponding_csv} is missing. Creating it now...")
+        dataset = ChessDataset(csv_file_name=corresponding_csv)
+        datasets.append(dataset)
+
+    for lmdb_file in lmdb_files:
+        dataset = ChessDataset(lmdb_file_name=lmdb_file)
+        datasets.append(dataset)
+
+    training_dataset = ConcatDataset(datasets)
     training_dataloader = DataLoader(
         dataset=training_dataset,
         batch_size=config.HardwareBasedConfig.BATCH_SIZE,
         shuffle=True,
         num_workers=config.HardwareBasedConfig.NUM_WORKERS,
         pin_memory=True,
+        persistent_workers=True
     )
 
     # 4) init loss functions
@@ -130,7 +169,9 @@ def train_model():
             global_step += 1
 
             # Update the progress bar with the latest loss information
-            progress_bar.set_postfix(loss=f"{total_loss.item():.4f}", step=global_step)
+            progress_bar.set_postfix(loss=f"{total_loss.item():.4f}",
+                                     step=global_step,
+                                     pos_per_sec=f"{(progress_bar.format_dict.get('rate', 0) or 0) * config.HardwareBasedConfig.BATCH_SIZE:.2f} pos/s")
 
             if global_step % config.TrainingConfig.LOG_EVERY_N_STEPS == 0:
                 log_message = f"Step [{global_step}/{config.TrainingConfig.TOTAL_TARGET_TRAINING_STEPS}], Loss: {total_loss.item():.4f}"
@@ -142,7 +183,7 @@ def train_model():
                 model.train()
 
             if global_step % config.TrainingConfig.SAVE_CHECKPOINTS_EVERY_N_STEPS == 0:
-                checkpoint_name = f"checkpoint_step_{global_step}.pt"
+                checkpoint_name = f"checkpoint_step_{global_step}_{config.ModelConfig.NUM_RESIDUAL_BLOCKS}B-{config.ModelConfig.NUM_FILTERS}F.pt"
                 # Make sure the checkpoint path exists and is correct
                 checkpoint_path = os.path.join(config.PathsConfig.CHECKPOINT_DIR, checkpoint_name)
                 torch.save({

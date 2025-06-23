@@ -10,6 +10,7 @@ version = "0.0.0"
 dependencies = [
     "numpy>=1.21.0",
     "pandas>=2.0.0",
+    "lmdb>=1.0.0",
 ]
 
 [tool.setuptools.packages.find]

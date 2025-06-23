@@ -6,8 +6,8 @@ build/
 .VSCodeCounter/
 .pytest_cache/
 .VSCodeCounter
-/data
-/logs
+data/
+logs/*
 
  CMake generated files and directories
 build/
@@ -52,4 +52,9 @@ Makefile # If top-level Makefiles are generated, though usually inside build/
 # OS-generated files
 .DS_Store # macOS
 Thumbs.db # Windows
+
+
 /logs
+/logs
+logs/training.log
+*.log

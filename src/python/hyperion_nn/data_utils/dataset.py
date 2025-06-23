@@ -3,8 +3,11 @@
 # - will read the csv and use fen_parser/move_encoder to return a tuple of (nn_input, policy_target, value_target)
 
 import pickle
+import math
 import os
 import pandas as pd
+import lmdb
+from tqdm import tqdm
 import torch
 from torch.utils.data import Dataset
 import numpy as np
@@ -30,66 +33,101 @@ class ChessDataset(Dataset):
     - policy_target (one-hot encoded): A tensor of shape (64, 73) representing the policy target.
     """
 
-    def __init__(self, force_recalculate_offset=False):
+    def __init__(self, lmdb_file_name=None, csv_file_name=None, force_create_lmdb=False):
 
-        self.csv_file_path = os.path.join(config.PathsConfig.RAW_TRAINING_DATA_DIR, 'games-2024.csv')
-        self.offset_file_path = os.path.join(config.PathsConfig.PROCESSED_TRAINING_DATA_DIR, 'games-2024.csv-offsets.pkl')
-        self.offsets = [] # List to store byte offsets for each row in the CSV file
+        if (lmdb_file_name is None) and (csv_file_name is None):
+            raise ValueError("Either lmdb_file_name or csv_file_name must be provided.")
 
-        if (force_recalculate_offset == False) and os.path.exists(self.offset_file_path):
-            logger.info(f"Loading offsets from {self.offset_file_path}...")
-            try:
-                with open(self.offset_file_path, 'rb') as f_offset:
-                    self.offsets = pickle.load(f_offset)
-                logger.info(f"Loaded {len(self.offsets)} total offsets successfully.")
-            
-            except Exception as e:
-                logger.error(f"Failed to load offsets from {self.offset_file_path}: {e}")
-                self.offsets = None
+        if csv_file_name:
+            self.csv_file_path = os.path.join(config.PathsConfig.RAW_TRAINING_DATA_DIR, csv_file_name)
         else:
-            if (force_recalculate_offset == True):
-                logger.info("Forcing recalculation of offsets...")
+            self.csv_file_path = os.path.join(config.PathsConfig.RAW_TRAINING_DATA_DIR, lmdb_file_name.replace('.lmdb', '.csv'))
+        
+        if lmdb_file_name:
+            self.lmdb_file_path = os.path.join(config.PathsConfig.PROCESSED_TRAINING_DATA_DIR, lmdb_file_name)
+        else:
+            self.lmdb_file_path = os.path.join(config.PathsConfig.PROCESSED_TRAINING_DATA_DIR, csv_file_name.replace('.csv', '.lmdb'))
+
+
+       
+        if (force_create_lmdb == True) or (not os.path.exists(self.lmdb_file_path)):
+            if (force_create_lmdb == True):
+                logger.info("Forcing creating LMDBs...")
             else:
-                logger.info(f"Offsets file {self.offset_file_path} does not exist. Recalculating offsets...")
-            self._calculate_and_save_offsets()
+                logger.info(f"LMDB file {self.lmdb_file_path} does not exist. Creating LMDB shard...")
+            self._create_lmdb_shard()
+        
 
-    def _calculate_and_save_offsets(self):
-        """
-        Calculate the offsets for each row in the CSV file.
-        This is used to quickly access the data without re-reading the entire file.
-        """
-        logger.info("Calculating offsets...")
-        self.offsets = []
+        logger.info(f"Loading LMDB shard from {self.lmdb_file_path}...")
 
+        # start a read-only transaction to ONLY get the length of the dataset
+        lmdb_env = lmdb.open(self.lmdb_file_path,
+                             readonly=True,
+                             lock=False,
+                             readahead=False,
+                             subdir=False,
+                             max_readers=config.HardwareBasedConfig.NUM_WORKERS)
+
+        with lmdb_env.begin(buffers=True) as txn:
+            raw_len = txn.get(b"__len__")
+            if raw_len is None:
+                logger.error(f"LMDB shard at {self.lmdb_file_path} is missing the '__len__' entry.")
+                raise RuntimeError(f"LMDB shard at {self.lmdb_file_path} is missing the '__len__' entry.")
+            self._length = int.from_bytes(raw_len, "little")
+        lmdb_env.close()
+
+        self.lmdb_env = None  # Will be initialized in each __getitem__ call
+
+    def _create_lmdb_shard(self):
+
+        # create the processed data dir if it doesn't exist
+        os.makedirs(config.PathsConfig.PROCESSED_TRAINING_DATA_DIR, exist_ok=True)
+
+        csv_file_size = os.path.getsize(self.csv_file_path)
+        mmap_target_size = math.ceil(csv_file_size * 1.4)  # 25% larger than the CSV file size
+        
         try:
-            
-            current_byte_offset = 0
-            
-            with open(self.csv_file_path, 'rb') as f:
-                for line_bytes in f:
-                    self.offsets.append(current_byte_offset)
-                    current_byte_offset += len(line_bytes)
-            logger.info(f"Calculated {len(self.offsets)} offsets successfully.")
-
-            # Save the offsets to a file for future use
-            with open(self.offset_file_path, 'wb') as f_offset:
-                pickle.dump(self.offsets, f_offset)
-            logger.info(f"Offsets saved to {self.offset_file_path} successfully.")
-
-        except FileNotFoundError:
-            logger.error(f"CSV file {self.csv_file_path} not found. Please check the path.")
-            self.offsets = []
-        
+            lmdb_env = lmdb.open(self.lmdb_file_path,
+                                map_size=mmap_target_size,
+                                subdir=False,       # treat the path as a file, not a directory
+                                sync=True,          # force data to be written to disk right after a commit
+                                metasync=True,      # force metadata/bookkeeping pages to be written to disk right after a commit
+                                map_async=False,    # use asynchronous I/O for writing data to disk while the data is being processed
+                                writemap=False)      # write directly to the memory map on the disk
         except Exception as e:
-            logger.error(f"Failed to calculate and save offsets: {e}")
-            self.offsets = []
+            logger.error(f"Failed to create LMDB environment at {self.lmdb_file_path}: {e}")
+            logger.error(f"Target map size was {mmap_target_size} bytes. ({mmap_target_size / (1024*1024):.2f} MB)")
+            raise e
+        txn = lmdb_env.begin(write=True) # the obj that will handle the transactions (txn means transaction)
+        idx = 0
 
-        
+
+        with open(self.csv_file_path, 'rb') as f:
+            progress_bar = tqdm(total=csv_file_size, unit='B', unit_scale=True, desc='Creating LMDB shard')
+            for raw_byte_line in f:
+                key = f"{idx:010d}".encode('ascii')  # makes a unique key for each line, zero-padded to 10 digits (ex: 0000314271)
+                txn.put(key, raw_byte_line)  # store the raw byte line in the lmdb with the key
+                progress_bar.update(len(raw_byte_line))
+                idx += 1
+
+
+            if idx % config.TrainingConfig.COMMIT_INTERVAL == 0:
+                txn.commit()
+                txn = lmdb_env.begin(write=True)
+
+                # final commit of any remaining
+        txn.put(b"__len__", (idx).to_bytes(8, "little")) # metadata entry to store the length of the dataset
+        txn.commit()
+        lmdb_env.sync()
+        lmdb_env.close()
+                
+        logger.info(f"LMDB shard created successfully at {self.lmdb_file_path} with {idx} entries.")
+
     def __len__(self):
         """
         Returns the number of rows in the dataset.
         """
-        return len(self.offsets)
+        return self._length
     
     # ^ This method may be changed in the future to better handle multithreading, including a init_worker() func
     def __getitem__(self, idx):
@@ -103,43 +141,35 @@ class ChessDataset(Dataset):
                 - policy_target (torch.Tensor): The one-hot encoded policy target.
                 - value_target (torch.Tensor): The value target.
             """
-
-
-        if not self.offsets:
-            logger.error("Offsets not calculated. Please run _calculate_and_save_offsets() first.")
-            raise RuntimeError("Offsets not calculated. Please run _calculate_and_save_offsets() first.")
+      
+        if idx < 0 or idx >= self._length:
+            logger.error(f"Index {idx} out of bounds for dataset of length {self._length}.")
+            raise IndexError(f"Index {idx} out of bounds for dataset of length {self._length}.")
         
-        if idx < 0 or idx >= len(self.offsets):
-            logger.error(f"Index {idx} out of bounds for dataset of length {len(self.offsets)}.")
-            raise IndexError(f"Index {idx} out of bounds for dataset of length {len(self.offsets)}.")
-        
-        target_offset = self.offsets[idx]
+        self.lmdb_env = lmdb.open(self.lmdb_file_path,
+                                 subdir=False,
+                                 readonly=True,
+                                 lock=False,
+                                 readahead=False,
+                                 max_readers=config.HardwareBasedConfig.NUM_WORKERS)
 
-        try:
-            with open(self.csv_file_path, 'rb') as f:
-                f.seek(target_offset)
-                line_str = f.readline().decode('utf-8').strip()
-
-        except FileNotFoundError:
-            logger.error(f"CSV file {self.csv_file_path} not found. Please check the path.")
-            raise RuntimeError(f"CSV file {self.csv_file_path} not found. Please check the path.")
-        except Exception as e:
-            logger.error(f"Failed to read line at offset {target_offset}: {e}")
-            raise RuntimeError(f"Failed to read line at offset {target_offset}: {e}")
+        with self.lmdb_env.begin(buffers=False) as txn:
+            key = f"{idx:010d}".encode('ascii')
+            raw_line_bytes = txn.get(key)
+            if raw_line_bytes is None:
+                logger.error(f"No data found for index {idx} in LMDB shard.")
+                raise RuntimeError(f"No data found for index {idx} in LMDB shard.")
         
+        line_str = raw_line_bytes.decode('utf-8').strip()
         line_items = line_str.split(',')
-        if len(line_items) != 3:
-            logger.error(f"Invalid line format at offset {target_offset}: {line_str}")
-            raise ValueError(f"Invalid line format at offset {target_offset}: {line_str}")
-        
         fen_str, uci_move_str, game_outcome_str = line_items
         game_outcome = int(game_outcome_str)
 
         nn_input_planes_np = fen_parser.fen_to_nn_input(fen_str)
-        nn_input_planes = torch.tensor(nn_input_planes_np, dtype=torch.float32)
+        nn_input_planes = torch.from_numpy(nn_input_planes_np).float()
  
         policy_idx = move_encoder.uci_to_policy_index(uci_move_str, fen_parser.get_piece_at_square(fen_str, uci_move_str[:2]), fen_parser.get_turn(fen_str))
-        policy_target = np.zeros(move_encoder.POLICY_HEAD_SIZE, dtype=np.float32)
+        policy_target = torch.zeros(move_encoder.POLICY_HEAD_SIZE, dtype=torch.float32)
         
         if 0 <= policy_idx < move_encoder.POLICY_HEAD_SIZE:
             policy_target[policy_idx] = 1.0

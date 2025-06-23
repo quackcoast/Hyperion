@@ -73,7 +73,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Plot training loss from a log file.")
     
     project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))))
-    default_log_path = os.path.join(project_root, 'logs', 'training.log')
+    default_log_path = os.path.join(project_root, '', 'training.log')
     
     parser.add_argument('--log_file', type=str, default=default_log_path,
                         help='Path to the training log file.')

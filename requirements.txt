@@ -14,3 +14,5 @@ tqdm
 # These are the same dependencies from pyproject.toml
 numpy>=1.21.0
 pandas>=2.0.0
+lmdb>=1.0.0
+tqdm>=4.64.0
