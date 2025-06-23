@@ -160,25 +160,30 @@ class ChessDataset(Dataset):
                 logger.error(f"No data found for index {idx} in LMDB shard.")
                 raise RuntimeError(f"No data found for index {idx} in LMDB shard.")
         
-        line_str = raw_line_bytes.decode('utf-8').strip()
-        line_items = line_str.split(',')
-        fen_str, uci_move_str, game_outcome_str = line_items
-        game_outcome = int(game_outcome_str)
+        try: 
+            line_str = raw_line_bytes.decode('utf-8').strip()
+            line_items = line_str.split(',')
+            fen_str, uci_move_str, game_outcome_str = line_items
+            game_outcome = int(game_outcome_str)
 
-        nn_input_planes_np = fen_parser.fen_to_nn_input(fen_str)
-        nn_input_planes = torch.from_numpy(nn_input_planes_np).float()
- 
-        policy_idx = move_encoder.uci_to_policy_index(uci_move_str, fen_parser.get_piece_at_square(fen_str, uci_move_str[:2]), fen_parser.get_turn(fen_str))
-        policy_target = torch.zeros(move_encoder.POLICY_HEAD_SIZE, dtype=torch.float32)
-        
-        if 0 <= policy_idx < move_encoder.POLICY_HEAD_SIZE:
-            policy_target[policy_idx] = 1.0
-        else:
-            logger.error(f"Policy index {policy_idx} out of bounds for UCI move {uci_move_str} in FEN {fen_str} at sample {idx}.")
-            raise ValueError(f"Policy index {policy_idx} out of bounds for UCI move {uci_move_str} in FEN {fen_str} at sample {idx}.")
+            nn_input_planes_np = fen_parser.fen_to_nn_input(fen_str)
+            nn_input_planes = torch.from_numpy(nn_input_planes_np).float()
+    
+            policy_idx = move_encoder.uci_to_policy_index(uci_move_str, fen_parser.get_piece_at_square(fen_str, uci_move_str[:2]), fen_parser.get_turn(fen_str))
+            policy_target = torch.zeros(move_encoder.POLICY_HEAD_SIZE, dtype=torch.float32)
+            
+            if 0 <= policy_idx < move_encoder.POLICY_HEAD_SIZE:
+                policy_target[policy_idx] = 1.0
+            else:
+                logger.error(f"Policy index {policy_idx} out of bounds for UCI move {uci_move_str} in FEN {fen_str} at sample {idx}.")
+                raise ValueError(f"Policy index {policy_idx} out of bounds for UCI move {uci_move_str} in FEN {fen_str} at sample {idx}.")
 
-        value_target = torch.tensor([float(game_outcome)], dtype=torch.float32)
-        
-        return nn_input_planes, policy_target, value_target
+            value_target = torch.tensor([float(game_outcome)], dtype=torch.float32)
+            
+            return nn_input_planes, policy_target, value_target
+        except ValueError:
+            # When int(game_outcome_str) fails
+            logger.warning(f"Skipping malformed row at index {idx} due to ValueError. Line content: '{line_str}'")
+            return None
 
                 
