@@ -17,6 +17,9 @@ class PathsConfig:
     RAW_TRAINING_DATA_DIR = os.path.join(DATA_DIR, 'raw')
     PROCESSED_TRAINING_DATA_DIR = os.path.join(DATA_DIR, 'processed')
 
+    RAW_VALIDATION_DATA_DIR = os.path.join(DATA_DIR, 'raw-validation')
+    VALIDATION_DIR = os.path.join(DATA_DIR, 'validation')
+
     MODELS_DIR = os.path.join(DATA_DIR, 'models')
     CHECKPOINT_DIR = os.path.join(MODELS_DIR, 'checkpoints')
 
@@ -28,8 +31,7 @@ class HardwareBasedConfig:
     # ! IMPORTANT: these is ARBITRARY and should be changed to match the actual hardware capabilities (vram, gpu, etc.)
     BATCH_SIZE = 256 #256 
 
-    NUM_WORKERS = 4
-    # was 8 i lowered it even tho ik its for the cpu part in the begginging^
+    NUM_WORKERS = 8
     
     DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")    
 
@@ -38,7 +40,7 @@ class TrainingConfig:
     # ~~ Training hyperparameters ~~
     LEARNING_RATE = 0.001  # how far the "steps" are in the gradient descent algorithm, just trust me that this is the right value
 
-    TOTAL_SAMPLES_TO_TRAIN = 150_000_000  # total number of samples to train on, this is ARBITRARY and should be changed later
+    TOTAL_SAMPLES_TO_TRAIN = 1_000_000_000  # total number of samples to train on, this is ARBITRARY and should be changed later
     
     TOTAL_TARGET_TRAINING_STEPS = TOTAL_SAMPLES_TO_TRAIN // HardwareBasedConfig.BATCH_SIZE + 1  # total number of training steps, this is ARBITRARY and should be changed later
 
@@ -49,8 +51,9 @@ class TrainingConfig:
     VALIDATION_SPLIT = 0.02  # 2% of the data will be used for validation
 
     # ~~ Logging/Checkpointing ~~
-    SAVE_CHECKPOINTS_EVERY_N_STEPS = 10_000  # save a checkpoint every N training steps
-    VALIDATE_EVERY_N_STEPS = VALIDATE_EVERY_N_STEPS = 5 * SAVE_CHECKPOINTS_EVERY_N_STEPS
+    SAVE_CHECKPOINTS_EVERY_N_STEPS = 100_0000  # save a checkpoint every N training steps
+    #VALIDATE_EVERY_N_STEPS = 3 * SAVE_CHECKPOINTS_EVERY_N_STEPS
+    VALIDATE_EVERY_N_STEPS = 10_000
     LOG_EVERY_N_STEPS = 1  # log training progress every N training steps
 
     # validate the model every N training steps

@@ -1,6 +1,6 @@
 # this will be used for the following:
 # - this is the main training script that will be used to train the neural network
-# - load config, initialize the Dataset and DataLoader, and initialize the model
+# - load config, initialize the Dataset andDataLoader, and initialize the model
 # - implement the training loop with forward and backward passes, loss calculation, and optimizer step
 # - handle model saving and loading
 
@@ -12,10 +12,11 @@ import torch.optim as optim
 import glob
 from tqdm import tqdm
 
+
 import hyperion_nn.config as config
 from hyperion_nn.data_utils.dataset import ChessDataset
 from hyperion_nn.models.resnet_cnn import HyperionNN
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Subset
 import hyperion_nn.utils.constants as constants
 
 
@@ -36,12 +37,103 @@ root_logger.addHandler(file_handler)
 console_handler = logging.StreamHandler(sys.stdout)
 # Set a higher level for the console. WARNING means it will only print messages
 # that are warnings, errors, or critical. INFO messages will be ignored.
-console_handler.setLevel(logging.WARNING) 
+console_handler.setLevel(logging.WARNING)
 console_formatter = logging.Formatter("[%(levelname)-8s] %(message)s")
 console_handler.setFormatter(console_formatter)
 root_logger.addHandler(console_handler)
 
 logger = logging.getLogger(__name__)
+
+def collate_fn(batch):
+        """
+        Filters out None values from a batch.
+        These None values are returned by __getitem__ when it encounters a bad row.
+        """
+        batch = list(filter(lambda x: x is not None, batch))
+        if not batch:
+            return None
+        return torch.utils.data.dataloader.default_collate(batch)
+
+def validate_model(model, validation_loader, device, policy_loss_fn, value_loss_fn, global_step):
+    """
+    Validates the model and saves raw prediction data for later analysis.
+    """
+    logger.info(f"Starting validation at global step {global_step}...")
+    model.eval()
+
+    # --- Initialize accumulators ---
+    total_policy_loss, total_value_loss, total_loss = 0, 0, 0
+    correct_policy_predictions, total_policy_predictions = 0, 0
+    correct_value_predictions, total_value_predictions = 0, 0
+    
+    # Lists to store raw data for plotting
+    all_value_predictions = []
+    all_value_targets = []
+
+    # --- Paths ---
+    os.makedirs(config.PathsConfig.VALIDATION_DIR, exist_ok=True)
+    validation_output_file = os.path.join(config.PathsConfig.VALIDATION_DIR, "validation.txt")
+
+    with torch.no_grad():
+        progress_bar = tqdm(validation_loader, desc=f"Validation at Step {global_step}", leave=False)
+        for batch in progress_bar:
+            if batch is None:
+                continue
+
+            input_planes, policy_target, value_target = batch
+            input_planes = input_planes.to(device)
+            policy_target = policy_target.to(device)
+            value_target = value_target.to(device)
+
+            policy_logits, value_output = model(input_planes)
+            value_prediction = torch.tanh(value_output)
+
+            # --- Store raw predictions and targets for later plotting ---
+            all_value_predictions.append(value_prediction.cpu())
+            all_value_targets.append(value_target.cpu())
+
+            # --- Loss Calculation ---
+            loss_policy = policy_loss_fn(policy_logits, torch.argmax(policy_target, dim=1))
+            loss_value = value_loss_fn(value_prediction, value_target)
+            total_policy_loss += loss_policy.item()
+            total_value_loss += loss_value.item()
+            total_loss += (loss_policy + loss_value).item()
+
+            # --- Accuracy Calculation (for quick summary) ---
+            _, predicted_policy_indices = torch.max(policy_logits, 1)
+            _, target_policy_indices = torch.max(policy_target, 1)
+            correct_policy_predictions += (predicted_policy_indices == target_policy_indices).sum().item()
+            total_policy_predictions += policy_target.size(0)
+
+            predicted_value_outcome = torch.round(value_prediction.squeeze()).long()
+            target_value_outcome = value_target.squeeze().long()
+            correct_value_predictions += (predicted_value_outcome == target_value_outcome).sum().item()
+            total_value_predictions += value_target.size(0)
+
+    # --- Save raw results to a file ---
+    all_value_predictions = torch.cat(all_value_predictions)
+    all_value_targets = torch.cat(all_value_targets)
+    results_path = os.path.join(config.PathsConfig.VALIDATION_DIR, f"validation_results_step_{global_step}.pt")
+    torch.save({'predictions': all_value_predictions, 'targets': all_value_targets}, results_path)
+    logger.info(f"Saved raw validation results for plotting to {results_path}")
+
+
+    # --- Log summary ---
+    num_batches = len(validation_loader)
+    if num_batches > 0:
+        avg_loss = total_loss / num_batches
+        policy_acc = (correct_policy_predictions / total_policy_predictions) * 100
+        value_acc = (correct_value_predictions / total_value_predictions) * 100
+        log_message = (f"Validation Summary at Step {global_step}: "
+                       f"Avg Loss: {avg_loss:.4f} | "
+                       f"Policy Acc: {policy_acc:.2f}% | "
+                       f"Value Acc (Rounded): {value_acc:.2f}%\n")
+        with open(validation_output_file, 'a') as f:
+            f.write(log_message)
+        logger.info(log_message.strip())
+
+    model.train()
+    logger.info("Validation finished.")
 
 
 def train_model():
@@ -61,7 +153,7 @@ def train_model():
     optimizer = optim.Adam(params=model.parameters(),
                            lr=config.TrainingConfig.LEARNING_RATE,
                            weight_decay=config.TrainingConfig.WEIGHT_DECAY)
-    
+
     # 2) checkpoint loading
     global_step = 0
     start_epoch = 0
@@ -81,14 +173,41 @@ def train_model():
             logger.warning("No checkpoints found. Starting training from scratch.")
 
     # 3) load data
-    training_dataset = ChessDataset()
+    training_csv_path = os.path.join(config.PathsConfig.RAW_TRAINING_DATA_DIR, 'LumbrasGigaBase_Online_2021.csv')
+    training_dataset = ChessDataset(csv_file_path=training_csv_path)
+
     training_dataloader = DataLoader(
         dataset=training_dataset,
         batch_size=config.HardwareBasedConfig.BATCH_SIZE,
         shuffle=True,
         num_workers=config.HardwareBasedConfig.NUM_WORKERS,
         pin_memory=True,
+        collate_fn=collate_fn,
     )
+
+    # Setup validation dataloader
+    validation_csv_path = os.path.join(config.PathsConfig.RAW_VALIDATION_DATA_DIR, 'validation.csv')
+    if os.path.exists(validation_csv_path):
+        validation_dataset_full = ChessDataset(csv_file_path=validation_csv_path)
+
+        # Take the first 4096 positions for validation as requested
+        num_validation_samples = min(176, len(validation_dataset_full))
+        validation_indices = list(range(num_validation_samples))
+        validation_subset = Subset(validation_dataset_full, validation_indices)
+
+        validation_dataloader = DataLoader(
+            dataset=validation_subset,
+            batch_size=config.HardwareBasedConfig.BATCH_SIZE,
+            shuffle=False, # No need to shuffle validation data
+            num_workers=config.HardwareBasedConfig.NUM_WORKERS,
+            pin_memory=True,
+            collate_fn=collate_fn,
+        )
+        logger.info(f"Validation dataset loaded with {len(validation_subset)} samples.")
+    else:
+        validation_dataloader = None
+        logger.warning(f"Validation CSV not found at {validation_csv_path}. Validation will be skipped.")
+
 
     # 4) init loss functions
     policy_loss_fn = torch.nn.CrossEntropyLoss()
@@ -97,23 +216,26 @@ def train_model():
     # 5) main training loop
     logger.info(f"Starting training loop at step {global_step}...")
     model.train()
-    
+
     steps_per_epoch = len(training_dataloader)
     total_epochs = (config.TrainingConfig.TOTAL_TARGET_TRAINING_STEPS // steps_per_epoch) + 1
 
-    print(constants.TRAINING_HEADER_ART) 
+    print(constants.TRAINING_HEADER_ART)
 
     for epoch in range(start_epoch, total_epochs):
         # Create a tqdm progress bar for the current epoch
         progress_bar = tqdm(training_dataloader, desc=f"Epoch {epoch+1}/{total_epochs}", leave=True)
-        
+
         for batch in progress_bar:
+            if batch is None:
+                logger.warning("Skipping an entire batch due to malformed data.")
+                continue
             input_planes, policy_target, value_target = batch
-            
+
             input_planes = input_planes.to(device)
             policy_target = policy_target.to(device)
             value_target = value_target.to(device)
-            
+
             optimizer.zero_grad()
             policy_logits, value_output = model(input_planes)
 
@@ -137,9 +259,15 @@ def train_model():
                 with open(steps_log_file, 'a') as f:
                     f.write(log_message + '\n')
 
+            # --- Validation Logic ---
             if global_step % config.TrainingConfig.VALIDATE_EVERY_N_STEPS == 0:
-                # TODO: Implement the validation logic here
+                if validation_dataloader:
+                    validate_model(model, validation_dataloader, device, policy_loss_fn, value_loss_fn, global_step)
+                else:
+                    logger.info("Skipping validation as validation_dataloader is not available.")
+                # Ensure model is back in training mode after validation
                 model.train()
+
 
             if global_step % config.TrainingConfig.SAVE_CHECKPOINTS_EVERY_N_STEPS == 0:
                 checkpoint_name = f"checkpoint_step_{global_step}.pt"
@@ -157,7 +285,7 @@ def train_model():
             # Exit condition if we reach the target number of steps mid-epoch
             if global_step >= config.TrainingConfig.TOTAL_TARGET_TRAINING_STEPS:
                 break
-        
+
         # Another check to break the outer loop
         if global_step >= config.TrainingConfig.TOTAL_TARGET_TRAINING_STEPS:
             break

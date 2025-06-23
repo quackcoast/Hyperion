@@ -30,10 +30,14 @@ class ChessDataset(Dataset):
     - policy_target (one-hot encoded): A tensor of shape (64, 73) representing the policy target.
     """
 
-    def __init__(self, force_recalculate_offset=False):
-
-        self.csv_file_path = os.path.join(config.PathsConfig.RAW_TRAINING_DATA_DIR, 'games-2024.csv')
-        self.offset_file_path = os.path.join(config.PathsConfig.PROCESSED_TRAINING_DATA_DIR, 'games-2024.csv-offsets.pkl')
+    def __init__(self, csv_file_path, force_recalculate_offset=False):
+        self.csv_file_path = csv_file_path
+        # Derive the offset file path from the CSV filename to avoid conflicts
+        processed_data_dir = config.PathsConfig.PROCESSED_TRAINING_DATA_DIR
+        os.makedirs(processed_data_dir, exist_ok=True) # Ensure directory exists
+        csv_filename = os.path.basename(self.csv_file_path)
+        self.offset_file_path = os.path.join(processed_data_dir, f'{csv_filename}-offsets.pkl')
+        
         self.offsets = [] # List to store byte offsets for each row in the CSV file
 
         if (force_recalculate_offset == False) and os.path.exists(self.offset_file_path):
@@ -127,28 +131,36 @@ class ChessDataset(Dataset):
             logger.error(f"Failed to read line at offset {target_offset}: {e}")
             raise RuntimeError(f"Failed to read line at offset {target_offset}: {e}")
         
-        line_items = line_str.split(',')
-        if len(line_items) != 3:
-            logger.error(f"Invalid line format at offset {target_offset}: {line_str}")
-            raise ValueError(f"Invalid line format at offset {target_offset}: {line_str}")
-        
-        fen_str, uci_move_str, game_outcome_str = line_items
-        game_outcome = int(game_outcome_str)
+        try:
+            line_items = line_str.split(',')
+            if len(line_items) != 3:
+                # Log the error and return None instead of raising an exception
+                logger.warning(f"Skipping row with invalid format at index {idx}. Line content: '{line_str}'")
+                return None
+            
+            fen_str, uci_move_str, game_outcome_str = line_items
+            game_outcome = int(game_outcome_str) # This line can cause the ValueError
 
-        nn_input_planes_np = fen_parser.fen_to_nn_input(fen_str)
-        nn_input_planes = torch.tensor(nn_input_planes_np, dtype=torch.float32)
- 
-        policy_idx = move_encoder.uci_to_policy_index(uci_move_str, fen_parser.get_piece_at_square(fen_str, uci_move_str[:2]), fen_parser.get_turn(fen_str))
-        policy_target = np.zeros(move_encoder.POLICY_HEAD_SIZE, dtype=np.float32)
-        
-        if 0 <= policy_idx < move_encoder.POLICY_HEAD_SIZE:
-            policy_target[policy_idx] = 1.0
-        else:
-            logger.error(f"Policy index {policy_idx} out of bounds for UCI move {uci_move_str} in FEN {fen_str} at sample {idx}.")
-            raise ValueError(f"Policy index {policy_idx} out of bounds for UCI move {uci_move_str} in FEN {fen_str} at sample {idx}.")
+            nn_input_planes_np = fen_parser.fen_to_nn_input(fen_str)
+            nn_input_planes = torch.tensor(nn_input_planes_np, dtype=torch.float32)
+    
+            policy_idx = move_encoder.uci_to_policy_index(uci_move_str, fen_parser.get_piece_at_square(fen_str, uci_move_str[:2]), fen_parser.get_turn(fen_str))
+            policy_target = np.zeros(move_encoder.POLICY_HEAD_SIZE, dtype=np.float32)
+            
+            if 0 <= policy_idx < move_encoder.POLICY_HEAD_SIZE:
+                policy_target[policy_idx] = 1.0
+            else:
+                logger.error(f"Policy index {policy_idx} out of bounds for UCI move {uci_move_str} in FEN {fen_str} at sample {idx}.")
+                # Log the error and return None
+                return None
 
-        value_target = torch.tensor([float(game_outcome)], dtype=torch.float32)
-        
-        return nn_input_planes, policy_target, value_target
+            value_target = torch.tensor([float(game_outcome)], dtype=torch.float32)
+            
+            return nn_input_planes, policy_target, value_target
+
+        except ValueError:
+            # When int(game_outcome_str) fails
+            logger.warning(f"Skipping malformed row at index {idx} due to ValueError. Line content: '{line_str}'")
+            return None
 
                 

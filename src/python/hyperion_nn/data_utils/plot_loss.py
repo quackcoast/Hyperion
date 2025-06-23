@@ -42,7 +42,7 @@ def plot_loss_graph(steps, losses, y_scale='linear', output_file='training_loss.
     plt.figure(figsize=(12, 7))
     plt.plot(steps, losses, label='Training Loss', color='deepskyblue', alpha=0.7, linestyle='-')
     
-    # --- Optional: Add a smoothed line to see the trend better ---
+    # --- Adda a smoothed line to see the trend better ---
     if len(steps) > 50:
         df = pd.DataFrame({'loss': losses})
         smoothed_loss = df['loss'].rolling(window=50, min_periods=1).mean()
@@ -52,14 +52,9 @@ def plot_loss_graph(steps, losses, y_scale='linear', output_file='training_loss.
     plt.xlabel('Training Steps', fontsize=12)
     plt.ylabel(f'Loss ({y_scale.capitalize()} Scale)', fontsize=12) # Dynamic Y-label
     plt.legend()
-    
-    # =======================================================
-    # ===> THE KEY CHANGE TO SET THE SCALE <===
-    # =======================================================
     if y_scale == 'log':
         #plt.yscale('log')
         plt.xscale('log')
-        # When using a log scale, it's often better to not have grid lines on the minor ticks
         plt.grid(True, which='both', ls='-')
     else:
         plt.grid(True)
@@ -73,7 +68,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Plot training loss from a log file.")
     
     project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))))
-    default_log_path = os.path.join(project_root, 'logs', 'training.log')
+    default_log_path = os.path.join(project_root, 'data', 'steps', 'step_log.txt')
     
     parser.add_argument('--log_file', type=str, default=default_log_path,
                         help='Path to the training log file.')
