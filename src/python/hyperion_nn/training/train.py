@@ -154,7 +154,7 @@ def train_model():
     os.makedirs(config.PathsConfig.RAW_TRAINING_DATA_DIR, exist_ok=True)
     os.makedirs(config.PathsConfig.RAW_VALIDATION_DATA_DIR, exist_ok=True)
     os.makedirs(config.PathsConfig.PROCESSED_TRAINING_DATA_DIR, exist_ok=True)
-    os.makedirs(config.PathsConfig.PROCESSED_VALIDATION_DATA_DIR, exist_ok=True)
+    os.makedirs(config.PathsConfig.VALIDATION_DIR, exist_ok=True)
     os.makedirs(config.PathsConfig.LOGS_DIR, exist_ok=True)
     
     # 1) model initialization
