@@ -71,8 +71,7 @@ def validate_model(model, validation_loader, device, policy_loss_fn, value_loss_
     all_value_targets = []
 
     # --- Paths ---
-    os.makedirs(config.PathsConfig.VALIDATION_DIR, exist_ok=True)
-    validation_output_file = os.path.join(config.PathsConfig.VALIDATION_DIR, "validation.txt")
+    validation_output_file = os.path.join(config.PathsConfig.POST_VALIDATION_DATA_DIR, "validation.txt")
 
     with torch.no_grad():
         progress_bar = tqdm(validation_loader, desc=f"Validation at Step {global_step}", leave=False)
@@ -113,7 +112,7 @@ def validate_model(model, validation_loader, device, policy_loss_fn, value_loss_
     # --- Save raw results to a file ---
     all_value_predictions = torch.cat(all_value_predictions)
     all_value_targets = torch.cat(all_value_targets)
-    results_path = os.path.join(config.PathsConfig.VALIDATION_DIR, f"validation_results_step_{global_step}.pt")
+    results_path = os.path.join(config.PathsConfig.POST_VALIDATION_DATA_DIR, f"validation_results_step_{global_step}.pt")
     torch.save({'predictions': all_value_predictions, 'targets': all_value_targets}, results_path)
     logger.info(f"Saved raw validation results for plotting to {results_path}")
 
@@ -135,6 +134,52 @@ def validate_model(model, validation_loader, device, policy_loss_fn, value_loss_
     model.train()
     logger.info("Validation finished.")
 
+def worker_init_fn(worker_id):
+    """
+    Called on each worker process initialization.
+    !! Must call the init_worker() method on every subclass of Dataset that uses LMDB. !!
+    """
+
+    worker_info = torch.utils.data.get_worker_info()
+    dataset = worker_info.dataset
+    if hasattr(dataset, "datasets"): # check if it's a ConcatDataset
+        for ds in dataset.datasets:
+            ds.init_worker()
+    else:
+        dataset.init_worker()
+
+def _create_dataset(raw_path, processed_path) -> ConcatDataset:
+    """
+    Helper function to create a ChessDataset instance.
+    Either raw_path or processed_path must be provided.
+    """
+    csv_files = glob.glob(os.path.join(raw_path, "*.csv"))
+    lmdb_files = [f for f in glob.glob(os.path.join(processed_path, "*.lmdb")) 
+                  if not f.endswith('.lmdb-lock')]
+
+    csv_file_names_set = set([os.path.splitext(os.path.basename(file))[0] for file in csv_files])
+    lmdb_file_names_set = set([os.path.splitext(os.path.basename(file))[0] for file in lmdb_files])
+    logger.info(f"CSV files found: {csv_file_names_set} LMDB files found: {lmdb_file_names_set}")
+    logger.info(f"CSV not set: {csv_files} LMDB not set: {lmdb_files}")
+
+    csvs_to_shard = csv_file_names_set - lmdb_file_names_set
+    csvs_to_shard = [os.path.join(raw_path, f"{csv_name}.csv") for csv_name in csvs_to_shard]
+    logger.info(f"Missing LMDB files for CSVs: {csvs_to_shard}")
+
+    datasets = []
+    for csv_path in csvs_to_shard:
+        logger.info(f"Missing LMDB shard for {csv_path}, creating it now...")
+        dataset = ChessDataset(csv_file_path=csv_path)
+        datasets.append(dataset)
+
+    for lmdb_path in lmdb_files:
+        dataset = ChessDataset(lmdb_file_path=lmdb_path)
+        datasets.append(dataset)
+
+    # 4) concatenate datasets and create dataloader
+    dataset = ConcatDataset(datasets)
+
+    return dataset
 
 def train_model():
     '''Main function to train the HyperionNN model.'''
@@ -143,10 +188,6 @@ def train_model():
     device = config.HardwareBasedConfig.DEVICE
     logger.info(f"Using device: {device}")
 
-    steps_log_dir = os.path.join("data", "steps")
-    os.makedirs(steps_log_dir, exist_ok=True)
-    steps_log_file = os.path.join(steps_log_dir, "step_log.txt")
-
     # 0) create necessary directories
     os.makedirs(config.PathsConfig.DATA_DIR, exist_ok=True)
     os.makedirs(config.PathsConfig.MODELS_DIR, exist_ok=True)
@@ -154,8 +195,10 @@ def train_model():
     os.makedirs(config.PathsConfig.RAW_TRAINING_DATA_DIR, exist_ok=True)
     os.makedirs(config.PathsConfig.RAW_VALIDATION_DATA_DIR, exist_ok=True)
     os.makedirs(config.PathsConfig.PROCESSED_TRAINING_DATA_DIR, exist_ok=True)
-    os.makedirs(config.PathsConfig.VALIDATION_DIR, exist_ok=True)
+    os.makedirs(config.PathsConfig.PROCESSED_VALIDATION_DATA_DIR, exist_ok=True)
     os.makedirs(config.PathsConfig.LOGS_DIR, exist_ok=True)
+    os.makedirs(config.PathsConfig.STEPS_LOG_DIR, exist_ok=True)
+    os.makedirs(config.PathsConfig.POST_VALIDATION_DATA_DIR, exist_ok=True)
     
     # 1) model initialization
     logger.info("Initializing model and optimizer...")
@@ -183,66 +226,48 @@ def train_model():
             logger.warning("No checkpoints found. Starting training from scratch.")
 
     # 3) load data
-    csv_files = glob.glob(os.path.join(config.PathsConfig.RAW_TRAINING_DATA_DIR, "*.csv"))
-    csv_files = [os.path.relpath(file, config.PathsConfig.RAW_TRAINING_DATA_DIR) for file in csv_files]
 
-    lmdb_files = [f for f in glob.glob(os.path.join(config.PathsConfig.PROCESSED_TRAINING_DATA_DIR, "*.lmdb")) 
-                  if not f.endswith('.lmdb-lock')]
-    lmdb_files = [os.path.relpath(file, config.PathsConfig.PROCESSED_TRAINING_DATA_DIR) for file in lmdb_files]
-
-    csv_file_names_set = set([os.path.splitext(os.path.basename(file))[0] for file in csv_files])
-    lmdb_file_names_set = set([os.path.splitext(os.path.basename(file))[0] for file in lmdb_files])
-    logger.info(f"CSV files found: {csv_file_names_set} LMDB files found: {lmdb_file_names_set}")
-    logger.info(f"CSV not set: {csv_files} LMDB not set: {lmdb_files}")
-
-    missing_lmdb_files = csv_file_names_set - lmdb_file_names_set
-    logger.info(f"Missing LMDB files for CSVs: {missing_lmdb_files}")
-
-    datasets = []
-    for missing_lmdb in missing_lmdb_files:
-        logger.info(f"Missing LMDB shard for {missing_lmdb}, creating it now...")
-        corresponding_csv = f"{missing_lmdb}.csv"
-        logger.info(f"corresponding_csv: {corresponding_csv}")
-        logger.info(f"LMDB shard for {corresponding_csv} is missing. Creating it now...")
-        dataset = ChessDataset(csv_file_name=corresponding_csv)
-        datasets.append(dataset)
-
-    for lmdb_file in lmdb_files:
-        dataset = ChessDataset(lmdb_file_name=lmdb_file)
-        datasets.append(dataset)
-
-    training_dataset = ConcatDataset(datasets)
+    training_dataset = _create_dataset(
+        raw_path=config.PathsConfig.RAW_TRAINING_DATA_DIR,
+        processed_path=config.PathsConfig.PROCESSED_TRAINING_DATA_DIR
+    )
     training_dataloader = DataLoader(
         dataset=training_dataset,
         batch_size=config.HardwareBasedConfig.BATCH_SIZE,
-        shuffle=True,
+        shuffle=True,  # Shuffle training data
         num_workers=config.HardwareBasedConfig.NUM_WORKERS,
         pin_memory=True,
-        persistent_workers=True
+        collate_fn=collate_fn,
+        worker_init_fn=worker_init_fn,  # Initialize workers for LMDB
     )
 
     # Setup validation dataloader
-    validation_csv_path = os.path.join(config.PathsConfig.RAW_VALIDATION_DATA_DIR, 'validation.csv')
-    if os.path.exists(validation_csv_path):
-        validation_dataset_full = ChessDataset(csv_file_path=validation_csv_path)
 
-        # Take the first 4096 positions for validation as requested
-        num_validation_samples = min(176, len(validation_dataset_full))
-        validation_indices = list(range(num_validation_samples))
-        validation_subset = Subset(validation_dataset_full, validation_indices)
+   
+    logger.info(f"Loading validation dataset from {config.PathsConfig.RAW_VALIDATION_DATA_DIR} and {config.PathsConfig.PROCESSED_VALIDATION_DATA_DIR}...")
+    validation_dataset = _create_dataset(
+        raw_path=config.PathsConfig.RAW_VALIDATION_DATA_DIR,
+        processed_path=config.PathsConfig.PROCESSED_VALIDATION_DATA_DIR
+    )
 
-        validation_dataloader = DataLoader(
-            dataset=validation_subset,
-            batch_size=config.HardwareBasedConfig.BATCH_SIZE,
-            shuffle=False, # No need to shuffle validation data
-            num_workers=config.HardwareBasedConfig.NUM_WORKERS,
-            pin_memory=True,
-            collate_fn=collate_fn,
-        )
-        logger.info(f"Validation dataset loaded with {len(validation_subset)} samples.")
+    # Take the first 4096 positions for validation as requested
+    num_validation_samples = min(32768, len(validation_dataset))
+    validation_indices = list(range(num_validation_samples))
+    validation_subset = Subset(validation_dataset, validation_indices)
+
+    validation_dataloader = DataLoader(
+        dataset=validation_subset,
+        batch_size=config.HardwareBasedConfig.BATCH_SIZE,
+        shuffle=False, # No need to shuffle validation data
+        num_workers=config.HardwareBasedConfig.NUM_WORKERS,
+        pin_memory=True,
+        collate_fn=collate_fn,
+    )
+    if len(validation_subset) > 0:
+        logger.info(f"Validation dataset sucessfuly loaded with {len(validation_subset)} samples from {config.PathsConfig.PROCESSED_VALIDATION_DATA_DIR}.")
     else:
         validation_dataloader = None
-        logger.warning(f"Validation CSV not found at {validation_csv_path}. Validation will be skipped.")
+        logger.warning(f"No validation data was found. Validation will be skipped.")
 
 
     # 4) init loss functions
@@ -294,7 +319,7 @@ def train_model():
 
             if global_step % config.TrainingConfig.LOG_EVERY_N_STEPS == 0:
                 log_message = f"Step [{global_step}/{config.TrainingConfig.TOTAL_TARGET_TRAINING_STEPS}], Loss: {total_loss.item():.4f}"
-                with open(steps_log_file, 'a') as f:
+                with open(os.path.join(config.PathsConfig.STEPS_LOG_DIR, "step_log.txt"), 'a') as f:
                     f.write(log_message + '\n')
 
             # --- Validation Logic ---

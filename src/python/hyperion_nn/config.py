@@ -17,12 +17,14 @@ class PathsConfig:
     RAW_TRAINING_DATA_DIR = os.path.join(DATA_DIR, 'raw-games')
     PROCESSED_TRAINING_DATA_DIR = os.path.join(DATA_DIR, 'processed-games')
     RAW_VALIDATION_DATA_DIR = os.path.join(DATA_DIR, 'raw-validation')
-    VALIDATION_DIR = os.path.join(DATA_DIR, 'validation')
+    PROCESSED_VALIDATION_DATA_DIR = os.path.join(DATA_DIR, 'processed-validation')
 
     MODELS_DIR = os.path.join(DATA_DIR, 'models')
     CHECKPOINT_DIR = os.path.join(MODELS_DIR, 'checkpoints')
 
     LOGS_DIR = os.path.join(ROOT_DIR, 'logs')
+    STEPS_LOG_DIR = os.path.join(DATA_DIR, 'steps')
+    POST_VALIDATION_DATA_DIR = os.path.join(DATA_DIR, 'post-validation-data')
 
 
 class HardwareBasedConfig:
@@ -36,6 +38,9 @@ class HardwareBasedConfig:
     DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")    
 
 class TrainingConfig:
+
+    # ~~ LMDB Sharding Parameters ~~
+    COMMIT_INTERVAL = 1000  # number of samples to commit to the LMDB database at a time
 
     # ~~ Training hyperparameters ~~
     LEARNING_RATE = 0.001  # how far the "steps" are in the gradient descent algorithm, just trust me that this is the right value
@@ -51,9 +56,9 @@ class TrainingConfig:
     VALIDATION_SPLIT = 0.02  # 2% of the data will be used for validation
 
     # ~~ Logging/Checkpointing ~~
-    SAVE_CHECKPOINTS_EVERY_N_STEPS = 50_000  # save a checkpoint every N training steps
+    SAVE_CHECKPOINTS_EVERY_N_STEPS = 25_000  # save a checkpoint every N training steps
     #VALIDATE_EVERY_N_STEPS = 3 * SAVE_CHECKPOINTS_EVERY_N_STEPS
-    VALIDATE_EVERY_N_STEPS = 10_000
+    VALIDATE_EVERY_N_STEPS = 5_000
     LOG_EVERY_N_STEPS = 1  # log training progress every N training steps
 
     # validate the model every N training steps

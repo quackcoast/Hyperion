@@ -2,15 +2,12 @@
 # - the Dataset class that will be used to format the data for the neural network
 # - will read the csv and use fen_parser/move_encoder to return a tuple of (nn_input, policy_target, value_target)
 
-import pickle
 import math
 import os
-import pandas as pd
 import lmdb
 from tqdm import tqdm
 import torch
-from torch.utils.data import Dataset
-import numpy as np
+from torch.utils.data import Dataset, get_worker_info
 import logging
 import hyperion_nn.data_utils.fen_parser as fen_parser
 import hyperion_nn.data_utils.move_encoder as move_encoder
@@ -33,21 +30,22 @@ class ChessDataset(Dataset):
     - policy_target (one-hot encoded): A tensor of shape (64, 73) representing the policy target.
     """
 
-    def __init__(self, lmdb_file_name=None, csv_file_name=None, force_create_lmdb=False):
+    def __init__(self, lmdb_file_path=None, csv_file_path=None, force_create_lmdb=False):
 
-        if (lmdb_file_name is None) and (csv_file_name is None):
-            raise ValueError("Either lmdb_file_name or csv_file_name must be provided.")
-
-        if csv_file_name:
-            self.csv_file_path = os.path.join(config.PathsConfig.RAW_TRAINING_DATA_DIR, csv_file_name)
-        else:
-            self.csv_file_path = os.path.join(config.PathsConfig.RAW_TRAINING_DATA_DIR, lmdb_file_name.replace('.lmdb', '.csv'))
+        if (lmdb_file_path is None) and (csv_file_path is None):
+            raise ValueError("Either lmdb_file_path or csv_file_path must be provided.")
         
-        if lmdb_file_name:
-            self.lmdb_file_path = os.path.join(config.PathsConfig.PROCESSED_TRAINING_DATA_DIR, lmdb_file_name)
-        else:
-            self.lmdb_file_path = os.path.join(config.PathsConfig.PROCESSED_TRAINING_DATA_DIR, csv_file_name.replace('.csv', '.lmdb'))
-
+        if lmdb_file_path:
+            self.lmdb_file_path = lmdb_file_path
+        elif csv_file_path:
+            self.csv_file_path = csv_file_path
+            # Derive the LMDB file path from the CSV file path
+            if os.path.dirname(csv_file_path) == config.PathsConfig.RAW_TRAINING_DATA_DIR:
+                self.lmdb_file_path = os.path.join(config.PathsConfig.PROCESSED_TRAINING_DATA_DIR, os.path.basename(csv_file_path).replace('.csv', '.lmdb'))
+            elif os.path.dirname(csv_file_path) == config.PathsConfig.RAW_VALIDATION_DATA_DIR:
+                self.lmdb_file_path = os.path.join(config.PathsConfig.PROCESSED_VALIDATION_DATA_DIR, os.path.basename(csv_file_path).replace('.csv', '.lmdb'))
+            else:
+                raise ValueError("CSV file must be in a valid raw training or validation data directory.")
 
        
         if (force_create_lmdb == True) or (not os.path.exists(self.lmdb_file_path)):
@@ -66,7 +64,7 @@ class ChessDataset(Dataset):
                              lock=False,
                              readahead=False,
                              subdir=False,
-                             max_readers=config.HardwareBasedConfig.NUM_WORKERS)
+                             max_readers=max(config.HardwareBasedConfig.NUM_WORKERS, 1))
 
         with lmdb_env.begin(buffers=True) as txn:
             raw_len = txn.get(b"__len__")
@@ -76,7 +74,25 @@ class ChessDataset(Dataset):
             self._length = int.from_bytes(raw_len, "little")
         lmdb_env.close()
 
-        self.lmdb_env = None  # Will be initialized in each __getitem__ call
+        self.lmdb_env = None  # Will be initialized in the init_worker() method
+
+    def init_worker(self):
+        """
+        Initializes the LMDB environment for each worker process.
+        This method should be called in the worker_init_fn of the DataLoader.
+        """
+        worker_info = get_worker_info()
+        if worker_info is None:
+            # Single-process data loading, no need to initialize
+            return
+        if self.lmdb_env is None:
+            self.lmdb_env = lmdb.open(self.lmdb_file_path,
+                                    subdir=False,
+                                    readonly=True,
+                                    lock=False,
+                                    readahead=False,
+                                    max_readers=max(config.HardwareBasedConfig.NUM_WORKERS, 1))
+            # logger.debug(f"Worker {os.getpid()} opened LMDB {self.lmdb_file_path}")
 
     def _create_lmdb_shard(self):
 
@@ -146,12 +162,8 @@ class ChessDataset(Dataset):
             logger.error(f"Index {idx} out of bounds for dataset of length {self._length}.")
             raise IndexError(f"Index {idx} out of bounds for dataset of length {self._length}.")
         
-        self.lmdb_env = lmdb.open(self.lmdb_file_path,
-                                 subdir=False,
-                                 readonly=True,
-                                 lock=False,
-                                 readahead=False,
-                                 max_readers=config.HardwareBasedConfig.NUM_WORKERS)
+        if self.lmdb_env is None:
+            self.init_worker()
 
         with self.lmdb_env.begin(buffers=False) as txn:
             key = f"{idx:010d}".encode('ascii')
