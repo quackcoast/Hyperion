@@ -127,10 +127,6 @@ class ChessDataset(Dataset):
                 idx += 1
 
 
-            if idx % config.TrainingConfig.COMMIT_INTERVAL == 0:
-                txn.commit()
-                txn = lmdb_env.begin(write=True)
-
                 # final commit of any remaining
         txn.put(b"__len__", (idx).to_bytes(8, "little")) # metadata entry to store the length of the dataset
         txn.commit()

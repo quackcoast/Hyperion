@@ -76,7 +76,7 @@ def plot_bin_distribution(file_path):
 
     # --- Save the Plot ---
     os.makedirs(config.PathsConfig.POST_VALIDATION_DATA_DIR, exist_ok=True)
-    plot_filename = os.path.join(config.PathsConfig.POST_VALIDATION_DATA_DIR, f'value_distribution_step_{step_number}1.png')
+    plot_filename = os.path.join(config.PathsConfig.POST_VALIDATION_DATA_DIR, f'value_distribution_step_{step_number}.png')
     plt.savefig(plot_filename)
     print(f"Plot saved to {plot_filename}")
 

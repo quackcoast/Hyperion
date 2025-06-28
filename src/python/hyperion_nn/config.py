@@ -39,8 +39,6 @@ class HardwareBasedConfig:
 
 class TrainingConfig:
 
-    # ~~ LMDB Sharding Parameters ~~
-    COMMIT_INTERVAL = 1000  # number of samples to commit to the LMDB database at a time
 
     # ~~ Training hyperparameters ~~
     LEARNING_RATE = 0.001  # how far the "steps" are in the gradient descent algorithm, just trust me that this is the right value
