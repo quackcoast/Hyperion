@@ -1,4 +1,5 @@
 # HYPERION/pyproject.toml
+
 [build-system]
 requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
@@ -8,12 +9,9 @@ name = "hyperion_nn"
 version = "0.0.0"
 dependencies = [
     "numpy>=1.21.0",
-    "torch>=2.0.0",
     "pandas>=2.0.0",
+    "lmdb>=1.0.0",
 ]
-# Add other metadata like authors, description if you wish
 
 [tool.setuptools.packages.find]
-where = ["src/python"]  # Tells setuptools your packages are under src/python
-# include = ["hyperion_nn*"] # Optional: be more explicit if needed
-# exclude = ["tests*"] # Usually tests are not part of the installed package
+where = ["src/python"]

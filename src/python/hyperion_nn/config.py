@@ -6,64 +6,86 @@
 
 import torch
 import os
-
-
+import math
 
 class PathsConfig:
 
     ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
     DATA_DIR = os.path.join(ROOT_DIR, 'data')
+    
 
-    RAW_TRAINING_DATA_DIR = os.path.join(DATA_DIR, 'raw')
-    PROCESSED_TRAINING_DATA_DIR = os.path.join(DATA_DIR, 'processed')
+    RAW_TRAINING_DATA_DIR = os.path.join(DATA_DIR, 'raw-games')
+    PROCESSED_TRAINING_DATA_DIR = os.path.join(DATA_DIR, 'processed-games')
+    RAW_VALIDATION_DATA_DIR = os.path.join(DATA_DIR, 'raw-validation')
+    PROCESSED_VALIDATION_DATA_DIR = os.path.join(DATA_DIR, 'processed-validation')
 
     MODELS_DIR = os.path.join(DATA_DIR, 'models')
     CHECKPOINT_DIR = os.path.join(MODELS_DIR, 'checkpoints')
 
     LOGS_DIR = os.path.join(ROOT_DIR, 'logs')
+    STEPS_LOG_DIR = os.path.join(DATA_DIR, 'steps')
+    POST_VALIDATION_DATA_DIR = os.path.join(DATA_DIR, 'post-validation-data')
 
 
-class TrainingDataConfig:
+class HardwareBasedConfig:
 
-    # ! IMPORTANT: this is ARBITRARY and should be changed to match the actual hardware capabilities (vram, gpu, etc.)
-    BATCH_SIZE = 512 
+    # ! IMPORTANT: these is ARBITRARY and should be changed to match the actual hardware capabilities (vram, gpu, etc.)
+    BATCH_SIZE = 512 #256 
 
-    # ! IMPORTANT: this is ARBITRARY and should be changed to match the actual hardware capabilities (cores, threads, clock speed, etc.)
-    NUM_WORKERS = 4
-
-    VALIDATION_SPLIT = 0.02  # 2% of the data will be used for validation
+    NUM_WORKERS = 16
+    # was 8 i lowered it even tho ik its for the cpu part in the begginging^
+    
+    DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")    
 
 class TrainingConfig:
 
-    DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    # ! IMPORTANT: this is ARBITRARY and should be researched more
-    LEARNING_RATE = 0.001  # initial learning rate for the optimizer
+    # ~~ Training hyperparameters ~~
+    LEARNING_RATE = 0.001  # how far the "steps" are in the gradient descent algorithm, just trust me that this is the right value
 
-    # ^ ! IMPORTANT: this is KINDA ARBITRARY and should be discussed a bit more
-    NUM_EPOCHS = 2  # number of epochs to train the model
-
-    # ! IMPORTANT: this is ARBITRARY and i have NO CLUE what this means
-    OPTIMIZER = 'adam'  # optimizer to use for training (e.g., 'adam', 'sgd', etc.)
+    TOTAL_SAMPLES_TO_TRAIN = 1_000_000_000  # total number of samples to train on, this is ARBITRARY and should be changed later
     
-    # & This might or might not be used in the future, but it is here for now
+    TOTAL_TARGET_TRAINING_STEPS = TOTAL_SAMPLES_TO_TRAIN // HardwareBasedConfig.BATCH_SIZE + 1  # total number of training steps, this is ARBITRARY and should be changed later
+
+    WEIGHT_DECAY = 0.0001  # prevents overfitting by adding a penalty for large weights (L2 regularization)
+
+    OPTIMIZER = 'adam'  # optimizer to use for training (e.g., 'adam', 'sgd', etc.)
+
+    VALIDATION_SPLIT = 0.02  # 2% of the data will be used for validation
+
+    # ~~ Logging/Checkpointing ~~
+    SAVE_CHECKPOINTS_EVERY_N_STEPS = 25_000  # save a checkpoint every N training steps
+    #VALIDATE_EVERY_N_STEPS = 3 * SAVE_CHECKPOINTS_EVERY_N_STEPS
+    VALIDATE_EVERY_N_STEPS = 5_000
+    LOG_EVERY_N_STEPS = 1  # log training progress every N training steps
+
+    # validate the model every N training steps
+    # IMPORTANT: this is ARBITRARY and should be researched more, though it seems to be not that complicated
+    # POLICY_LOSS_WEIGHT = 1.0  # weight for the policy loss in the total loss calculation
+    # VALUE_LOSS_WEIGHT = 1.0  # weight for the value loss in the total loss calculation
+
+    # This will prob not be used in the future, but it is here in case
     # MOMENTUM = 0.9  # momentum for the optimizer (if applicable, e.g., for SGD)
-
-    # ! IMPORTANT: this is ARBITRARY and should be researched more
-    WEIGHT_DECAY = 1e-4  # weight decay for the optimizer (L2 regularization)
-
-    # ^ IMPORTANT: this is ARBITRARY and should be researched more, though it seems to be not that complicated
-    POLICY_LOSS_WEIGHT = 1.0  # weight for the policy loss in the total loss calculation
-    VALUE_LOSS_WEIGHT = 1.0  # weight for the value loss in the total loss calculation
 
 class ModelConfig:
 
     NUM_INPUT_PLANES = 20  # number of input planes (see fen_parser.py for details)
+    
     INPUT_SHAPE = (NUM_INPUT_PLANES, 8, 8)  # input shape for the model
 
-    # ! IMPORTANT: these are ARBITRARY and should be changed ;ater with finalized NN Arch
-    NUM_RESIDUAL_BLOCKS = -1
-    NUM_FILTERS = -2
+    TOTAL_OUTPUT_PLANES = 72  # total number of output planes (see move_encoder.py for details)
+    TOTAL_OUTPUT_SIZE = 64 * TOTAL_OUTPUT_PLANES  # total output size for the policy head
+
+    # ! IMPORTANT: these are ARBITRARY and should be changed later with finalized NN Arch
+    # size table: b = residual block (depth), f = filters (width)
+    #             | 16b x 128f |
+    # ------------|------------|------------
+    #  12b x 96f  | 12b x 128f | 12b x 196f
+    # ------------|------------|------------
+    #             |  8b x 128f |
+    #
+    NUM_RESIDUAL_BLOCKS = 12
+    NUM_FILTERS = 96
 
     POLICY_HEAD_SIZE = 64 * 73  # 64 squares * 73 possible moves (including underpromotions)
 
