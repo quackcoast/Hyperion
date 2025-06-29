@@ -118,9 +118,13 @@ def validate_model(model, validation_loader, device, policy_loss_fn, value_loss_
 
 
     # --- Log summary ---
-    num_batches = len(validation_loader)
-    if num_batches > 0:
-        avg_loss = total_loss / num_batches
+    processed_batches = 0  
+    for batch in validation_loader:  
+        if batch is not None:  
+            processed_batches += 1  
+
+    if processed_batches > 0:  
+        avg_loss = total_loss / processed_batches
         policy_acc = (correct_policy_predictions / total_policy_predictions) * 100
         value_acc = (correct_value_predictions / total_value_predictions) * 100
         log_message = (f"Validation Summary at Step {global_step}: "
@@ -250,7 +254,7 @@ def train_model():
         processed_path=config.PathsConfig.PROCESSED_VALIDATION_DATA_DIR
     )
 
-    # Take the first 4096 positions for validation as requested
+    # Take the first 32768 positions for validation as requested
     num_validation_samples = min(32768, len(validation_dataset))
     validation_indices = list(range(num_validation_samples))
     validation_subset = Subset(validation_dataset, validation_indices)
