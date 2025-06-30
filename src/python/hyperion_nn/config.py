@@ -32,8 +32,7 @@ class HardwareBasedConfig:
     # ! IMPORTANT: these is ARBITRARY and should be changed to match the actual hardware capabilities (vram, gpu, etc.)
     BATCH_SIZE = 512 #256 
 
-    NUM_WORKERS = 16
-    # was 8 i lowered it even tho ik its for the cpu part in the begginging^
+    NUM_WORKERS = 8
     
     DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")    
 

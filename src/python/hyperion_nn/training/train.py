@@ -206,10 +206,19 @@ def train_model():
     
     # 1) model initialization
     logger.info("Initializing model and optimizer...")
+
     model = HyperionNN().to(device)
+    try:
+        model = torch.compile(model)
+        logger.info("Model compiled successfully with torch.compile().")
+    except Exception as e:
+        logger.warning(f"torch.compile() failed with error: {e}. Proceeding with the un-compiled model.")
+
     optimizer = optim.Adam(params=model.parameters(),
-                           lr=config.TrainingConfig.LEARNING_RATE,
-                           weight_decay=config.TrainingConfig.WEIGHT_DECAY)
+                        lr=config.TrainingConfig.LEARNING_RATE,
+                        weight_decay=config.TrainingConfig.WEIGHT_DECAY)
+    
+    torch.set_float32_matmul_precision('high')
 
     # 2) checkpoint loading
     global_step = 0
