@@ -207,17 +207,22 @@ def train_model():
     # 1) model initialization
     logger.info("Initializing model and optimizer...")
 
+    # >>> FIX: First, create the model instance and move it to the device.
     model = HyperionNN().to(device)
+
+    # <<< OPTIMIZATION: PyTorch 2.0 Compile >>>
+    # Now, with the 'model' variable already defined, we can safely try to compile it.
     try:
         model = torch.compile(model)
         logger.info("Model compiled successfully with torch.compile().")
     except Exception as e:
         logger.warning(f"torch.compile() failed with error: {e}. Proceeding with the un-compiled model.")
 
+    # This part is now safe because 'model' is guaranteed to have a value.
     optimizer = optim.Adam(params=model.parameters(),
                         lr=config.TrainingConfig.LEARNING_RATE,
                         weight_decay=config.TrainingConfig.WEIGHT_DECAY)
-    
+
     torch.set_float32_matmul_precision('high')
 
     # 2) checkpoint loading
@@ -271,7 +276,7 @@ def train_model():
     validation_dataloader = DataLoader(
         dataset=validation_subset,
         batch_size=config.HardwareBasedConfig.BATCH_SIZE,
-        shuffle=False, # No need to shuffle validation data
+        shuffle=True, # No need to shuffle validation data
         num_workers=config.HardwareBasedConfig.NUM_WORKERS,
         pin_memory=True,
         collate_fn=collate_fn,

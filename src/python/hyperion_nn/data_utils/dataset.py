@@ -83,6 +83,7 @@ class ChessDataset(Dataset):
         """
         worker_info = get_worker_info()
         if worker_info is None:
+            # Single-process data loading, no need to initialize
             return
         if self.lmdb_env is None:
             self.lmdb_env = lmdb.open(self.lmdb_file_path,
@@ -94,55 +95,42 @@ class ChessDataset(Dataset):
             # logger.debug(f"Worker {os.getpid()} opened LMDB {self.lmdb_file_path}")
 
     def _create_lmdb_shard(self):
-        """
-        Creates an LMDB shard from a CSV file with high performance settings.
-        This involves committing data in batches to avoid memory issues.
-        """
-        os.makedirs(os.path.dirname(self.lmdb_file_path), exist_ok=True)
+
+        # create the processed data dir if it doesn't exist
+        os.makedirs(config.PathsConfig.PROCESSED_TRAINING_DATA_DIR, exist_ok=True)
 
         csv_file_size = os.path.getsize(self.csv_file_path)
-        map_size = csv_file_size * 3
-
-        logger.info(f"Creating LMDB shard for {self.csv_file_path}.")
-        logger.info(f"Target map size: {map_size / (1024**3):.2f} GB")
-
+        mmap_target_size = math.ceil(csv_file_size * 1.4)  # 25% larger than the CSV file size
+        
         try:
-            lmdb_env = lmdb.open(
-                self.lmdb_file_path,
-                map_size=map_size,
-                subdir=False,
-                readonly=False,
-                metasync=False,  
-                sync=False,      
-                map_async=True, 
-                writemap=True 
-            )
+            lmdb_env = lmdb.open(self.lmdb_file_path,
+                                map_size=mmap_target_size,
+                                subdir=False,       # treat the path as a file, not a directory
+                                sync=True,          # force data to be written to disk right after a commit
+                                metasync=True,      # force metadata/bookkeeping pages to be written to disk right after a commit
+                                map_async=False,    # use asynchronous I/O for writing data to disk while the data is being processed
+                                writemap=False)      # write directly to the memory map on the disk
         except Exception as e:
             logger.error(f"Failed to create LMDB environment at {self.lmdb_file_path}: {e}")
+            logger.error(f"Target map size was {mmap_target_size} bytes. ({mmap_target_size / (1024*1024):.2f} MB)")
             raise e
-
-        # --- 3. Write in batches ---
-        commit_interval = 100000  # Commit every 100,000 records
-        txn = lmdb_env.begin(write=True)
+        txn = lmdb_env.begin(write=True) # the obj that will handle the transactions (txn means transaction)
         idx = 0
-        
+
+
         with open(self.csv_file_path, 'rb') as f:
             progress_bar = tqdm(total=csv_file_size, unit='B', unit_scale=True, desc='Creating LMDB shard')
             for raw_byte_line in f:
-                key = f"{idx:010d}".encode('ascii')
-                txn.put(key, raw_byte_line)
+                key = f"{idx:010d}".encode('ascii')  # makes a unique key for each line, zero-padded to 10 digits (ex: 0000314271)
+                txn.put(key, raw_byte_line)  # store the raw byte line in the lmdb with the key
                 progress_bar.update(len(raw_byte_line))
                 idx += 1
 
-                if idx % commit_interval == 0:
-                    txn.commit()
-                    txn = lmdb_env.begin(write=True)
 
-        # --- 4. Final commit for any remaining entries ---
-        txn.put(b"__len__", str(idx).encode('utf-8'))
+                # final commit of any remaining
+        txn.put(b"__len__", (idx).to_bytes(8, "little")) # metadata entry to store the length of the dataset
         txn.commit()
-
-        lmdb_env.sync(True)
+        lmdb_env.sync()
         lmdb_env.close()
                 
         logger.info(f"LMDB shard created successfully at {self.lmdb_file_path} with {idx} entries.")
