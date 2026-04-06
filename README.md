@@ -10,7 +10,10 @@ There are two different and separate builds for this project:
      ```bash
      pip install -e .
      ```
-
+   - Navigate to the training directory and run:  
+     ```bash
+     python train.py
+     ```
 2. **C++ (Engine and Inference)**
    - The C++ code is the actual chess engine. It uses the neural network files trained by the Python component (saved in `data/completed_models`) for its inferences during searches.
 
