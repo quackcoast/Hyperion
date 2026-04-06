@@ -29,43 +29,48 @@ class PathsConfig:
 
 class HardwareBasedConfig:
 
-    # ! IMPORTANT: these is ARBITRARY and should be changed to match the actual hardware capabilities (vram, gpu, etc.)
-    BATCH_SIZE = 64 #256 
+    BATCH_SIZE = 1024
 
     NUM_WORKERS = 8
-    # was 8 i lowered it even tho ik its for the cpu part in the begginging^
     
     DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")    
 
 class TrainingConfig:
 
-
     # ~~ Training hyperparameters ~~
-    LEARNING_RATE = 0.001  # how far the "steps" are in the gradient descent algorithm, just trust me that this is the right value
 
-    TOTAL_SAMPLES_TO_TRAIN = 1_000_000_000  # total number of samples to train on, this is ARBITRARY and should be changed later
-    
-    TOTAL_TARGET_TRAINING_STEPS = TOTAL_SAMPLES_TO_TRAIN // HardwareBasedConfig.BATCH_SIZE + 1  # total number of training steps, this is ARBITRARY and should be changed later
+    # Peak learning rate for OneCycleLR scheduler.
+    # With batch_size=1024, scaled up from the base 0.001 @ batch 64 via linear scaling rule,
+    # then tuned conservatively.  OneCycleLR will warm up to this and anneal back down.
+    LEARNING_RATE = 0.006
 
-    WEIGHT_DECAY = 0.0001  # prevents overfitting by adding a penalty for large weights (L2 regularization)
+    TOTAL_SAMPLES_TO_TRAIN = 1_000_000_000  # total number of samples to train on
 
-    OPTIMIZER = 'adam'  # optimizer to use for training (e.g., 'adam', 'sgd', etc.)
+    TOTAL_TARGET_TRAINING_STEPS = TOTAL_SAMPLES_TO_TRAIN // HardwareBasedConfig.BATCH_SIZE + 1
+
+    WEIGHT_DECAY = 0.0001  # L2 regularization (decoupled via AdamW)
+
+    OPTIMIZER = 'adamw'  # AdamW decouples weight decay from adaptive LR
 
     VALIDATION_SPLIT = 0.02  # 2% of the data will be used for validation
 
+    # Gradient clipping max norm — stabilizes early training when loss is high
+    MAX_GRAD_NORM = 1.0
+
     # ~~ Logging/Checkpointing ~~
     SAVE_CHECKPOINTS_EVERY_N_STEPS = 25_000  # save a checkpoint every N training steps
-    #VALIDATE_EVERY_N_STEPS = 3 * SAVE_CHECKPOINTS_EVERY_N_STEPS
-    VALIDATE_EVERY_N_STEPS = 5_000
-    LOG_EVERY_N_STEPS = 1  # log training progress every N training steps
+    VALIDATE_EVERY_N_STEPS = 250_000_000_000_000 # TODO: this currently does not work, so its a super high number to prevent use
+    LOG_EVERY_N_STEPS = 100  # log training progress every N training steps (was 1 — disk I/O bottleneck)
 
-    # validate the model every N training steps
-    # IMPORTANT: this is ARBITRARY and should be researched more, though it seems to be not that complicated
-    # POLICY_LOSS_WEIGHT = 1.0  # weight for the policy loss in the total loss calculation
-    # VALUE_LOSS_WEIGHT = 1.0  # weight for the value loss in the total loss calculation
+    # ~~ Learning Rate Schedule ~~
+    # OneCycleLR: warmup for the first 2% of steps, then cosine anneal
+    LR_WARMUP_PCT = 0.02  # fraction of total steps used for LR warmup
 
-    # This will prob not be used in the future, but it is here in case
-    # MOMENTUM = 0.9  # momentum for the optimizer (if applicable, e.g., for SGD)
+    # ~~ Loss Weighting ~~
+    # Policy CE loss starts at ~ln(4672)≈8.45 while value MSE starts at ~0.5-1.0.
+    # Scale value loss so the value head gets meaningful gradient signal.
+    VALUE_LOSS_WEIGHT = 1.0  # adjust to 2.0-4.0 if value head is still under-learning
+
 
 class ModelConfig:
 
@@ -73,28 +78,33 @@ class ModelConfig:
     
     INPUT_SHAPE = (NUM_INPUT_PLANES, 8, 8)  # input shape for the model
 
-    TOTAL_OUTPUT_PLANES = 72  # total number of output planes (see move_encoder.py for details)
-    TOTAL_OUTPUT_SIZE = 64 * TOTAL_OUTPUT_PLANES  # total output size for the policy head
+    # The move encoder defines 73 move planes:
+    #   56 queen-like (8 directions × 7 distances)
+    #   + 8 knight
+    #   + 9 underpromotion (3 pieces × 3 directions)
+    TOTAL_MOVE_PLANES = 73
+    POLICY_HEAD_SIZE = 64 * TOTAL_MOVE_PLANES  # 64 squares × 73 move types = 4672
 
-    # ! IMPORTANT: these are ARBITRARY and should be changed later with finalized NN Arch
-    # size table: b = residual block (depth), f = filters (width), * = tested
+    # ~~ Model Architecture ~~
+    # size table: b = residual block (depth), f = filters (width)
     #
     # |-----------|-----------|------------|------------|------------|
-    # | 20b x 64f | 20b x 96f | 20b x 128f | 20b x 196f |*20b x 256f*|
+    # | 20b x 64f | 20b x 96f | 20b x 128f | 20b x 196f |*20b x 256f*|  ← recommended
     # |-----------|-----------|------------|------------|------------|
-    # | 16b x 64f | 16b x 96f |*16b x 128f*|*16b x 196f*| 16b x 256f | 16b x 512f
+    # | 16b x 64f | 16b x 96f | 16b x 128f | 16b x 196f | 16b x 256f |
     # |-----------|-----------|------------|------------|------------|
-    # | 12b x 64f |*12b x 96f*|*12b x 128f*| 12b x 196f | 12b x 256f |
+    # | 12b x 64f | 12b x 96f | 12b x 128f | 12b x 196f | 12b x 256f |
     # |-----------|-----------|------------|------------|------------|
-    # |  8b x 64f | *8b x 96f*|  8b x 128f | *8b x 196f*| 8b x 256f  |
+    # |  8b x 64f |  8b x 96f |  8b x 128f |  8b x 196f | 8b x 256f  |
     # |-----------|-----------|------------|------------|------------|
-    # | *4b x 64f*|  4b x 96f |  4b x 128f |  4b x 196f | 4b x 256f  |
+    # |  4b x 64f |  4b x 96f |  4b x 128f |  4b x 196f | 4b x 256f  |
     # |-----------|-----------|------------|------------|------------|
+    #
+    # 20b-256f (~24M params) is the sweet spot for RTX 4060 + ~110M positions.
+    # Fits comfortably in 8GB VRAM with AMP.  Meaningful step up from 16b-196f (~11.5M).
 
-    NUM_RESIDUAL_BLOCKS = 16
-    NUM_FILTERS =  196
-
-    POLICY_HEAD_SIZE = 64 * 73  # 64 squares * 73 possible moves (including underpromotions)
+    NUM_RESIDUAL_BLOCKS = 20
+    NUM_FILTERS = 256
 
 
 # ! IMPORTANT: this is ARBITRARY and again i have NO CLUE what this means, or if we are even going to use it
@@ -122,4 +132,3 @@ class SelfPlayConfig:
     # Higher temperature = more exploration.
     OPENING_TEMPERATURE = 1.0
     TEMPERATURE_CUTOFF_MOVE = 30 # After this move, temperature becomes ~0 (play greedily)
-    

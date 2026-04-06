@@ -27,9 +27,11 @@ public:
     ~NeuralNetwork();
 
     InferenceResult infer(const hyperion::core::Position& pos);
+    std::vector<InferenceResult> infer_batch(const std::vector<hyperion::core::Position>& pos_list);
 
 private:
     torch::Tensor position_to_tensor(const hyperion::core::Position& pos);
+    torch::Tensor positions_to_tensor(const std::vector<hyperion::core::Position>& pos_list);
     std::unique_ptr<torch::jit::Module> module_;
     torch::Device device_;
 };

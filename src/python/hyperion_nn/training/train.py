@@ -65,6 +65,7 @@ def validate_model(model, validation_loader, device, policy_loss_fn, value_loss_
     total_policy_loss, total_value_loss, total_loss = 0, 0, 0
     correct_policy_predictions, total_policy_predictions = 0, 0
     correct_value_predictions, total_value_predictions = 0, 0
+    processed_batches = 0
     
     # lists to store raw data for plotting
     all_value_predictions = []
@@ -79,21 +80,26 @@ def validate_model(model, validation_loader, device, policy_loss_fn, value_loss_
             if batch is None:
                 continue
 
+            processed_batches += 1
+
             input_planes, policy_target, value_target = batch
             input_planes = input_planes.to(device)
             policy_target = policy_target.to(device)
             value_target = value_target.to(device)
 
-            policy_logits, value_output = model(input_planes)
-            value_prediction = torch.tanh(value_output)
+            # use AMP autocast for validation too (faster inference)
+            with torch.amp.autocast('cuda', enabled=(device.type == 'cuda')):
+                policy_logits, value_output = model(input_planes)
+                value_prediction = torch.tanh(value_output)
+
+                # loss calculation
+                loss_policy = policy_loss_fn(policy_logits, torch.argmax(policy_target, dim=1))
+                loss_value = value_loss_fn(value_prediction, value_target)
 
             # store raw predictions and targets for later plotting
             all_value_predictions.append(value_prediction.cpu())
             all_value_targets.append(value_target.cpu())
 
-            # loss calculation
-            loss_policy = policy_loss_fn(policy_logits, torch.argmax(policy_target, dim=1))
-            loss_value = value_loss_fn(value_prediction, value_target)
             total_policy_loss += loss_policy.item()
             total_value_loss += loss_value.item()
             total_loss += (loss_policy + loss_value).item()
@@ -116,19 +122,15 @@ def validate_model(model, validation_loader, device, policy_loss_fn, value_loss_
     torch.save({'predictions': all_value_predictions, 'targets': all_value_targets}, results_path)
     logger.info(f"Saved raw validation results for plotting to {results_path}")
 
-
     # log summary
-    processed_batches = 0  
-    for batch in validation_loader:  
-        if batch is not None:  
-            processed_batches += 1  
-
-    if processed_batches > 0:  
+    if processed_batches > 0:
         avg_loss = total_loss / processed_batches
+        avg_policy_loss = total_policy_loss / processed_batches
+        avg_value_loss = total_value_loss / processed_batches
         policy_acc = (correct_policy_predictions / total_policy_predictions) * 100
         value_acc = (correct_value_predictions / total_value_predictions) * 100
         log_message = (f"Validation Summary at Step {global_step}: "
-                       f"Avg Loss: {avg_loss:.4f} | "
+                       f"Avg Loss: {avg_loss:.4f} (P: {avg_policy_loss:.4f} V: {avg_value_loss:.4f}) | "
                        f"Policy Acc: {policy_acc:.2f}% | "
                        f"Value Acc (Rounded): {value_acc:.2f}%\n")
         with open(validation_output_file, 'a') as f:
@@ -204,24 +206,34 @@ def train_model():
     os.makedirs(config.PathsConfig.STEPS_LOG_DIR, exist_ok=True)
     os.makedirs(config.PathsConfig.POST_VALIDATION_DATA_DIR, exist_ok=True)
 
+    torch.set_float32_matmul_precision('high')
 
-    
     logger.info("Initializing model and optimizer...")
 
     model = HyperionNN().to(device)
 
-    try:
-        model = torch.compile(model)
-        logger.info("Model compiled successfully with torch.compile().")
-    except Exception as e:
-        logger.warning(f"torch.compile() failed with error: {e}. Proceeding with the un-compiled model.")
+    # Log model parameter count
+    total_params = sum(p.numel() for p in model.parameters())
+    trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    logger.info(f"Model: {config.ModelConfig.NUM_RESIDUAL_BLOCKS}b-{config.ModelConfig.NUM_FILTERS}f | "
+                f"Total params: {total_params:,} | Trainable: {trainable_params:,}")
 
-    #lowkey torch just said I should use this idrk where to put it
-    torch.set_float32_matmul_precision('high')
+    if sys.platform == "win32":
+        logger.info("Skipping torch.compile() — Triton (required by the Inductor backend) is not supported on Windows.")
+    else:
+        try:
+            model = torch.compile(model)
+            logger.info("Model compiled successfully with torch.compile().")
+        except Exception as e:
+            logger.warning(f"torch.compile() failed with error: {e}. Proceeding with the un-compiled model.")
 
-    optimizer = optim.Adam(params=model.parameters(),
-                           lr=config.TrainingConfig.LEARNING_RATE,
-                           weight_decay=config.TrainingConfig.WEIGHT_DECAY)
+    # AdamW decouples weight decay from the adaptive learning rate, which generally
+    # leads to better generalization than vanilla Adam with weight_decay.
+    optimizer = optim.AdamW(params=model.parameters(),
+                            lr=config.TrainingConfig.LEARNING_RATE,
+                            weight_decay=config.TrainingConfig.WEIGHT_DECAY)
+
+    scaler = torch.amp.GradScaler('cuda', enabled=(device.type == 'cuda'))
 
     # 2) checkpoint loading
     global_step = 0
@@ -237,6 +249,9 @@ def train_model():
             optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
             global_step = checkpoint['global_step']
             start_epoch = checkpoint.get('epoch', 0)
+            # Restore scaler state if available
+            if 'scaler_state_dict' in checkpoint:
+                scaler.load_state_dict(checkpoint['scaler_state_dict'])
             logger.info(f"Checkpoint loaded. Resuming from step {global_step} (Epoch {start_epoch}).")
         else:
             logger.warning("No checkpoints found. Starting training from scratch.")
@@ -247,14 +262,18 @@ def train_model():
         raw_path=config.PathsConfig.RAW_TRAINING_DATA_DIR,
         processed_path=config.PathsConfig.PROCESSED_TRAINING_DATA_DIR
     )
+
+    use_persistent = config.HardwareBasedConfig.NUM_WORKERS > 0
+
     training_dataloader = DataLoader(
         dataset=training_dataset,
         batch_size=config.HardwareBasedConfig.BATCH_SIZE,
-        shuffle=True,  # Shuffle training data
+        shuffle=True, 
         num_workers=config.HardwareBasedConfig.NUM_WORKERS,
         pin_memory=True,
         collate_fn=collate_fn,
-        worker_init_fn=worker_init_fn,  # Initialize workers for LMDB
+        worker_init_fn=worker_init_fn,  
+        persistent_workers=use_persistent,
     )
 
     # Setup validation dataloader
@@ -274,13 +293,15 @@ def train_model():
     validation_dataloader = DataLoader(
         dataset=validation_subset,
         batch_size=config.HardwareBasedConfig.BATCH_SIZE,
-        shuffle=False, # No need to shuffle validation data
+        shuffle=False,
         num_workers=config.HardwareBasedConfig.NUM_WORKERS,
         pin_memory=True,
         collate_fn=collate_fn,
+        worker_init_fn=worker_init_fn,
+        persistent_workers=use_persistent,
     )
     if len(validation_subset) > 0:
-        logger.info(f"Validation dataset sucessfuly loaded with {len(validation_subset)} samples from {config.PathsConfig.PROCESSED_VALIDATION_DATA_DIR}.")
+        logger.info(f"Validation dataset successfully loaded with {len(validation_subset)} samples from {config.PathsConfig.PROCESSED_VALIDATION_DATA_DIR}.")
     else:
         validation_dataloader = None
         logger.warning(f"No validation data was found. Validation will be skipped.")
@@ -290,8 +311,26 @@ def train_model():
     policy_loss_fn = torch.nn.CrossEntropyLoss()
     value_loss_fn = torch.nn.MSELoss()
 
-    # 5) main training loop
+    # 5) Learning rate scheduler — OneCycleLR with warmup + cosine annealing
+    scheduler = optim.lr_scheduler.OneCycleLR(
+        optimizer,
+        max_lr=config.TrainingConfig.LEARNING_RATE,
+        total_steps=config.TrainingConfig.TOTAL_TARGET_TRAINING_STEPS,
+        pct_start=config.TrainingConfig.LR_WARMUP_PCT,
+    )
+    # Fast-forward scheduler to current global_step if resuming
+    if global_step > 0:
+        logger.info(f"Fast-forwarding LR scheduler to step {global_step}...")
+        for _ in range(global_step):
+            scheduler.step()
+
+    # 6) main training loop
     logger.info(f"Starting training loop at step {global_step}...")
+    logger.info(f"Config: batch_size={config.HardwareBasedConfig.BATCH_SIZE}, "
+                f"lr={config.TrainingConfig.LEARNING_RATE}, "
+                f"weight_decay={config.TrainingConfig.WEIGHT_DECAY}, "
+                f"grad_clip={config.TrainingConfig.MAX_GRAD_NORM}, "
+                f"AMP={'enabled' if device.type == 'cuda' else 'disabled'}")
     model.train()
 
     steps_per_epoch = len(training_dataloader)
@@ -300,7 +339,6 @@ def train_model():
     print(constants.TRAINING_HEADER_ART)
 
     for epoch in range(start_epoch, total_epochs):
-        # Create a tqdm progress bar for the current epoch
         progress_bar = tqdm(training_dataloader, desc=f"Epoch {epoch+1}/{total_epochs}", leave=True)
 
         for batch in progress_bar:
@@ -309,54 +347,71 @@ def train_model():
                 continue
             input_planes, policy_target, value_target = batch
 
-            input_planes = input_planes.to(device)
-            policy_target = policy_target.to(device)
-            value_target = value_target.to(device)
+            input_planes = input_planes.to(device, non_blocking=True)
+            policy_target = policy_target.to(device, non_blocking=True)
+            value_target = value_target.to(device, non_blocking=True)
 
             optimizer.zero_grad(set_to_none=True)
-            policy_logits, value_output = model(input_planes)
 
-            # calculate losses
-            policy_loss_indices = torch.argmax(policy_target, dim=1)
-            loss_policy = policy_loss_fn(policy_logits, policy_loss_indices)
-            value_prediction = torch.tanh(value_output)
-            loss_value = value_loss_fn(value_prediction, value_target)
-            total_loss = loss_policy + loss_value
+            with torch.amp.autocast('cuda', enabled=(device.type == 'cuda')):
+                policy_logits, value_output = model(input_planes)
 
-            # backpropagation
-            total_loss.backward()
-            optimizer.step()
+                # calculate losses
+                policy_loss_indices = torch.argmax(policy_target, dim=1)
+                loss_policy = policy_loss_fn(policy_logits, policy_loss_indices)
+                value_prediction = torch.tanh(value_output)
+                loss_value = value_loss_fn(value_prediction, value_target)
+                total_loss = loss_policy + config.TrainingConfig.VALUE_LOSS_WEIGHT * loss_value
+
+            scaler.scale(total_loss).backward()
+
+            # Gradient clipping — stabilizes training when loss is large/volatile
+            scaler.unscale_(optimizer)
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=config.TrainingConfig.MAX_GRAD_NORM)
+
+            scaler.step(optimizer)
+            scaler.update()
+
+            # Step the LR scheduler
+            scheduler.step()
+
             global_step += 1
 
             # Update the progress bar with the latest loss information
-            progress_bar.set_postfix(loss=f"{total_loss.item():.4f}",
-                                     step=global_step,
-                                     pos_per_sec=f"{(progress_bar.format_dict.get('rate', 0) or 0) * config.HardwareBasedConfig.BATCH_SIZE:.2f} pos/s")
+            current_lr = scheduler.get_last_lr()[0]
+            progress_bar.set_postfix(
+                loss=f"{total_loss.item():.4f}",
+                p_loss=f"{loss_policy.item():.4f}",
+                v_loss=f"{loss_value.item():.4f}",
+                lr=f"{current_lr:.2e}",
+                step=global_step,
+                pos_per_sec=f"{(progress_bar.format_dict.get('rate', 0) or 0) * config.HardwareBasedConfig.BATCH_SIZE:.0f}")
 
             if global_step % config.TrainingConfig.LOG_EVERY_N_STEPS == 0:
-                log_message = f"Step [{global_step}/{config.TrainingConfig.TOTAL_TARGET_TRAINING_STEPS}], Loss: {total_loss.item():.4f}"
+                log_message = (f"Step [{global_step}/{config.TrainingConfig.TOTAL_TARGET_TRAINING_STEPS}], "
+                               f"Loss: {total_loss.item():.4f} (P: {loss_policy.item():.4f} V: {loss_value.item():.4f}), "
+                               f"LR: {current_lr:.2e}")
                 with open(os.path.join(config.PathsConfig.STEPS_LOG_DIR, "step_log.txt"), 'a') as f:
                     f.write(log_message + '\n')
 
-            # validation logic
+            # validation logic - this is currently broken "AttributeError: 'Subset' object has no attribute 'init_worker'"
             if global_step % config.TrainingConfig.VALIDATE_EVERY_N_STEPS == 0:
                 if validation_dataloader:
                     validate_model(model, validation_dataloader, device, policy_loss_fn, value_loss_fn, global_step)
                 else:
                     logger.info("Skipping validation as validation_dataloader is not available.")
-                # Ensure model is back in training mode after validation
                 model.train()
 
 
             if global_step % config.TrainingConfig.SAVE_CHECKPOINTS_EVERY_N_STEPS == 0:
                 checkpoint_name = f"checkpoint_step_{global_step}_{config.ModelConfig.NUM_RESIDUAL_BLOCKS}B-{config.ModelConfig.NUM_FILTERS}F.pt"
-                # Make sure the checkpoint path exists and is correct
                 checkpoint_path = os.path.join(config.PathsConfig.CHECKPOINT_DIR, checkpoint_name)
                 torch.save({
                     'global_step': global_step,
                     'epoch': epoch,
                     'model_state_dict': model.state_dict(),
                     'optimizer_state_dict': optimizer.state_dict(),
+                    'scaler_state_dict': scaler.state_dict(),
                     'loss': total_loss.item(),
                 }, f=checkpoint_path)
                 logger.info(f"Checkpoint saved to {checkpoint_path}")

@@ -157,5 +157,122 @@ torch::Tensor NeuralNetwork::position_to_tensor(const hyperion::core::Position& 
     return tensor;
 }
 
+torch::Tensor NeuralNetwork::positions_to_tensor(const std::vector<hyperion::core::Position>& pos_list) {
+    int batch_size = pos_list.size();
+    const int num_planes = 20;
+    const int plane_size = 64;
+
+    torch::Tensor tensor = torch::zeros({batch_size, num_planes, 8, 8}, torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCPU));
+    float* features = tensor.data_ptr<float>();
+    
+    int batch_stride = num_planes * plane_size;
+
+    for (int b = 0; b < batch_size; ++b) {
+        float* batch_features = features + b * batch_stride;
+        const auto& pos = pos_list[b];
+
+        auto populate_plane = [&](int plane_idx, hyperion::core::bitboard_t bb) {
+            while (bb) {
+                int sq = hyperion::core::pop_lsb(bb);
+                batch_features[plane_idx * plane_size + sq] = 1.0f;
+            }
+        };
+
+        auto fill_plane = [&](int plane_idx, float value) {
+            std::fill_n(&batch_features[plane_idx * plane_size], plane_size, value);
+        };
+
+        using namespace hyperion::core;
+        populate_plane(0, pos.get_pieces(P_PAWN, WHITE));
+        populate_plane(1, pos.get_pieces(P_KNIGHT, WHITE));
+        populate_plane(2, pos.get_pieces(P_BISHOP, WHITE));
+        populate_plane(3, pos.get_pieces(P_ROOK, WHITE));
+        populate_plane(4, pos.get_pieces(P_QUEEN, WHITE));
+        populate_plane(5, pos.get_pieces(P_KING, WHITE));
+        populate_plane(6, pos.get_pieces(P_PAWN, BLACK));
+        populate_plane(7, pos.get_pieces(P_KNIGHT, BLACK));
+        populate_plane(8, pos.get_pieces(P_BISHOP, BLACK));
+        populate_plane(9, pos.get_pieces(P_ROOK, BLACK));
+        populate_plane(10, pos.get_pieces(P_QUEEN, BLACK));
+        populate_plane(11, pos.get_pieces(P_KING, BLACK));
+
+        if (pos.get_side_to_move() == WHITE) {
+            fill_plane(12, 1.0f);
+        }
+        if (pos.castling_rights & WK_CASTLE_FLAG) fill_plane(13, 1.0f);
+        if (pos.castling_rights & WQ_CASTLE_FLAG) fill_plane(14, 1.0f);
+        if (pos.castling_rights & BK_CASTLE_FLAG) fill_plane(15, 1.0f);
+        if (pos.castling_rights & BQ_CASTLE_FLAG) fill_plane(16, 1.0f);
+
+        square_e ep_sq = pos.en_passant_square;
+        if (ep_sq != square_e::NO_SQ) {
+            batch_features[17 * plane_size + static_cast<int>(ep_sq)] = 1.0f;
+        }
+
+        float fifty_move_val = std::min(1.0f, static_cast<float>(pos.halfmove_clock) / 100.0f);
+        fill_plane(18, fifty_move_val);
+        float fullmove_val = std::min(1.0f, static_cast<float>(pos.fullmove_number) / 200.0f);
+        fill_plane(19, fullmove_val);
+    }
+
+    return tensor;
+}
+
+std::vector<InferenceResult> NeuralNetwork::infer_batch(const std::vector<hyperion::core::Position>& pos_list) {
+    if (pos_list.empty()) return {};
+
+    try {
+        torch::NoGradGuard no_grad;
+        torch::Tensor input_tensor = positions_to_tensor(pos_list);
+        input_tensor = input_tensor.to(device_);
+        
+        std::vector<torch::jit::IValue> inputs;
+        inputs.push_back(input_tensor);
+
+        torch::jit::IValue output_val = module_->forward(inputs);
+        
+        if (!output_val.isTuple()) {
+            std::cerr << "CRASH LOG: Model output is NOT a tuple! It is of type: " << output_val.tagKind() << std::endl;
+            exit(1);
+        }
+
+        auto output_tuple = output_val.toTuple();
+
+        if (output_tuple->elements().size() < 2) {
+            std::cerr << "CRASH LOG: Model output tuple has fewer than 2 elements! Size: " << output_tuple->elements().size() << std::endl;
+            exit(1);
+        }
+
+        at::Tensor policy_tensor_gpu = output_tuple->elements()[0].toTensor();
+        at::Tensor value_tensor_gpu = output_tuple->elements()[1].toTensor();
+
+        at::Tensor policy_tensor_cpu = policy_tensor_gpu.to(torch::kCPU);
+        at::Tensor value_tensor_cpu = value_tensor_gpu.to(torch::kCPU);
+
+        int batch_size = pos_list.size();
+        std::vector<InferenceResult> results(batch_size);
+        
+        float* value_ptr = value_tensor_cpu.data_ptr<float>();
+        float* policy_ptr = policy_tensor_cpu.data_ptr<float>();
+        int policy_size = policy_tensor_cpu.size(1); 
+
+        for (int b = 0; b < batch_size; ++b) {
+            results[b].value = value_ptr[b];
+            results[b].policy.assign(policy_ptr + b * policy_size, policy_ptr + (b + 1) * policy_size);
+        }
+
+        return results;
+    } catch (const c10::Error& e) {
+        std::cerr << "CRASH LOG: c10::Error during batched inference! " << e.what() << std::endl;
+        exit(1);
+    } catch (const std::exception& e) {
+        std::cerr << "CRASH LOG: std::exception during batched inference! " << e.what() << std::endl;
+        exit(1);
+    } catch (...) {
+        std::cerr << "CRASH LOG: Unknown exception during batched inference!" << std::endl;
+        exit(1);
+    }
+}
+
 } // namespace engine
 } // namespace hyperion

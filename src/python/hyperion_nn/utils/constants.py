@@ -40,8 +40,8 @@ PIECE_CHAR_MAP = {
 # && Constants for neural network I/O &&
 
 TOTAL_INPUT_PLANES = 20  # Total number of planes in the neural network input
-TOTAL_POLICY_OUTPUT_PLANES = 72  # Total number of planes in the neural network output
-TOTAL_POLICY_HEAD_SIZE = 64 * TOTAL_POLICY_OUTPUT_PLANES  # Size of the policy head in the neural network
+TOTAL_POLICY_OUTPUT_PLANES = 73  # Total number of planes: 56 queen + 8 knight + 9 underpromotion
+TOTAL_POLICY_HEAD_SIZE = 64 * TOTAL_POLICY_OUTPUT_PLANES  # Size of the policy head in the neural network (4672)
 
 TRAINING_HEADER_ART = r"""
     +-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-+

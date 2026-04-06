@@ -63,14 +63,15 @@ class HyperionNN(nn.Module):
             *[ResidualBlock() for _ in range(config.ModelConfig.NUM_RESIDUAL_BLOCKS)]
         )
 
-        # policy head
+        # policy head — BatchNorm added after 1x1 conv (matches AlphaZero architecture)
         self.policy_head = nn.Sequential(
             nn.Conv2d(in_channels=config.ModelConfig.NUM_FILTERS,
-                      out_channels=2,  # 64 is a common choice for policy head
+                      out_channels=2,
                       kernel_size=1),
+            nn.BatchNorm2d(num_features=2),
             nn.ReLU(),
             nn.Flatten(),
-            nn.Linear(in_features=2 * 8 * 8, out_features=config.ModelConfig.POLICY_HEAD_SIZE)  # assuming input size is 8x8
+            nn.Linear(in_features=2 * 8 * 8, out_features=config.ModelConfig.POLICY_HEAD_SIZE)
         )
 
         # value head
@@ -100,8 +101,3 @@ class HyperionNN(nn.Module):
         value_logits = self.value_head(out)
 
         return policy_logits, value_logits
-        
-
-
-        
-        

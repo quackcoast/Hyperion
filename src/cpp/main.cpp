@@ -31,7 +31,7 @@ void uci_loop() {
         std::string token;
         iss >> token;
         if (token == "uci") {
-            std::cout << "id name Hyperion 1.0.0-16b-196f" << std::endl;
+            std::cout << "id name Hyperion 0.4.0" << std::endl;
             std::cout << "id author Tom and LJ" << std::endl;
             std::cout << "uciok" << std::endl;
         }
