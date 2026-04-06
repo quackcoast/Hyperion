@@ -21,13 +21,10 @@ set(HYPERION_SOURCES
     src/cpp/core/movegen.cpp
     src/cpp/core/position.cpp
     src/cpp/core/zobrist.cpp
-    src/cpp/search/eval.cpp
     src/cpp/search/search.cpp
     src/cpp/search/tt.cpp
     src/cpp/search/move_encoder.cpp
     src/cpp/nn_inference/nn_inference.cpp
-    src/cpp/uci/engine.cpp
-    src/cpp/uci/uci.cpp
 )
 
 add_executable(HyperionEngine ${HYPERION_SOURCES})
