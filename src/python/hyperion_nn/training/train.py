@@ -207,6 +207,7 @@ def train_model():
 
     
     logger.info("Initializing model and optimizer...")
+
     model = HyperionNN().to(device)
 
     try:
@@ -219,8 +220,9 @@ def train_model():
     torch.set_float32_matmul_precision('high')
 
     optimizer = optim.Adam(params=model.parameters(),
-                       lr=config.TrainingConfig.LEARNING_RATE,
-                       weight_decay=config.TrainingConfig.WEIGHT_DECAY)
+                           lr=config.TrainingConfig.LEARNING_RATE,
+                           weight_decay=config.TrainingConfig.WEIGHT_DECAY)
+
     # 2) checkpoint loading
     global_step = 0
     start_epoch = 0
@@ -272,7 +274,7 @@ def train_model():
     validation_dataloader = DataLoader(
         dataset=validation_subset,
         batch_size=config.HardwareBasedConfig.BATCH_SIZE,
-        shuffle=False,
+        shuffle=False, # No need to shuffle validation data
         num_workers=config.HardwareBasedConfig.NUM_WORKERS,
         pin_memory=True,
         collate_fn=collate_fn,
