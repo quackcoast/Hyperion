@@ -62,7 +62,7 @@ void test_initialization() {
     }
 
     // 2. Check for uniqueness
-    // Total keys = 1 (black_to_move) + (6*2*64) (piece_square) + 16 (castling) + 8 (en_passant_file)
+    // total keys = 1 (black_to_move) + (6*2*64) (piece_square) + 16 (castling) + 8 (en_passant_file)
     //              = 1 + 768 + 16 + 8 = 793
     size_t expected_unique_keys = 1 + (hyperion::core::NUM_PIECE_TYPES * 2 * hyperion::core::NUM_SQUARES) + 16 + 8;
     check(all_keys.size() == expected_unique_keys, "All Zobrist keys should be unique.");

@@ -247,8 +247,8 @@ bitboard_t generate_attacks_slow_internal(int sq, bitboard_t blockers, bool is_r
 
 std::vector<bitboard_t> get_blocker_permutations(bitboard_t mask) {
     std::vector<bitboard_t> permutations;
-#if defined(USE_BMI2_SLIDERS) // Or a separate macro for PDEP if preferred
-    int num_set_bits = count_set_bits(mask); // Uses your existing popcount function
+#if defined(USE_BMI2_SLIDERS) 
+    int num_set_bits = count_set_bits(mask); 
     for (uint64_t i = 0; i < (1ULL << num_set_bits); ++i) {
         permutations.push_back(_pdep_u64(i, mask));
     }

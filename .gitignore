@@ -20,6 +20,7 @@ Makefile # If top-level Makefiles are generated, though usually inside build/
 # Compiled Object files
 *.o
 *.obj
+.vs
 
 # Precompiled Headers
 *.gch

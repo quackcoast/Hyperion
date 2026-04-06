@@ -1,4 +1,6 @@
 // hyperion/src/cpp/core/bitboard.hpp
+
+#pragma once
 #ifndef HYPERION_CORE_BITBOARD_HPP
 #define HYPERION_CORE_BITBOARD_HPP
 
@@ -13,11 +15,10 @@
 namespace hyperion {
 namespace core {   
 
-// --- Constants ---
 const bitboard_t EMPTY_BB = 0ULL;    
 const bitboard_t UNIVERSAL_BB = ~0ULL;
 
-// --- Core Bitboard Operations ---
+// core bitboard operations
 
 inline void set_bit(bitboard_t& bb, int square_index) {
     assert(square_index >= 0 && square_index < NUM_SQUARES);
@@ -74,23 +75,23 @@ inline bitboard_t square_to_bitboard(int square_index) {
 }
 
 
-// --- Precomputed Attack Tables ---
-// Initialized once in a Zobrist::initialize()
-// Pawn attacks: [color][from_square]
+// precomputed attack tables 
+// initialized once in a Zobrist::initialize()
+// pawn attacks: [color][from_square]
 extern std::array<std::array<bitboard_t, NUM_SQUARES>, 2> pawn_attacks;
 
-// Knight attacks: [from_square]
+// knight attacks: [from_square]
 extern std::array<bitboard_t, NUM_SQUARES> knight_attacks;
 
-// King attacks: [from_square]
+// king attacks: [from_square]
 extern std::array<bitboard_t, NUM_SQUARES> king_attacks;
 
-// --- Magic Bitboard Structures and Declarations ---
+// magic bitboard structures and declarations
 struct MagicEntry {
-    bitboard_t mask;        // Relevance mask for the square
+    bitboard_t mask;        // relevance mask for the square
 #ifndef USE_BMI2_SLIDERS
-    uint64_t magic_number;  // The magic number
-    uint8_t shift;          // Bits to shift (64 - popcount(mask))
+    uint64_t magic_number;  // the magic number
+    uint8_t shift;          // bits to shift (64 - popcount(mask))
 #endif
     bitboard_t* attacks;    // Pointer to the attack sub-table for this square
 };
@@ -104,7 +105,7 @@ constexpr size_t BISHOP_ATTACK_TABLE_SIZE = 5248;
 extern bitboard_t rook_attack_table[ROOK_ATTACK_TABLE_SIZE];
 extern bitboard_t bishop_attack_table[BISHOP_ATTACK_TABLE_SIZE];
 
-// --- New Slider Attack Generation Functions ---
+// new slider attack generation functions
 bitboard_t get_rook_slider_attacks(square_e sq, bitboard_t occupied);
 bitboard_t get_bishop_slider_attacks(square_e sq, bitboard_t occupied);
 

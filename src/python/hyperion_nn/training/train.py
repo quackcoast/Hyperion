@@ -25,7 +25,7 @@ import hyperion_nn.utils.constants as constants
 root_logger = logging.getLogger()
 root_logger.setLevel(logging.INFO)
 
-# 2. Create the file handler. This handler writes messages to your log file.
+# 2. Create the file handler. This handler writes messages to log files.
 log_file_path = os.path.join(config.PathsConfig.LOGS_DIR, "training.log")
 file_handler = logging.FileHandler(log_file_path, mode='a') # 'a' for append
 file_handler.setLevel(logging.INFO) # Log everything of level INFO and above to the file.
@@ -61,16 +61,16 @@ def validate_model(model, validation_loader, device, policy_loss_fn, value_loss_
     logger.info(f"Starting validation at global step {global_step}...")
     model.eval()
 
-    # --- Initialize accumulators ---
+    # initialize accumulators
     total_policy_loss, total_value_loss, total_loss = 0, 0, 0
     correct_policy_predictions, total_policy_predictions = 0, 0
     correct_value_predictions, total_value_predictions = 0, 0
     
-    # Lists to store raw data for plotting
+    # lists to store raw data for plotting
     all_value_predictions = []
     all_value_targets = []
 
-    # --- Paths ---
+    # paths
     validation_output_file = os.path.join(config.PathsConfig.POST_VALIDATION_DATA_DIR, "validation.txt")
 
     with torch.no_grad():
@@ -87,18 +87,18 @@ def validate_model(model, validation_loader, device, policy_loss_fn, value_loss_
             policy_logits, value_output = model(input_planes)
             value_prediction = torch.tanh(value_output)
 
-            # --- Store raw predictions and targets for later plotting ---
+            # store raw predictions and targets for later plotting
             all_value_predictions.append(value_prediction.cpu())
             all_value_targets.append(value_target.cpu())
 
-            # --- Loss Calculation ---
+            # loss calculation
             loss_policy = policy_loss_fn(policy_logits, torch.argmax(policy_target, dim=1))
             loss_value = value_loss_fn(value_prediction, value_target)
             total_policy_loss += loss_policy.item()
             total_value_loss += loss_value.item()
             total_loss += (loss_policy + loss_value).item()
 
-            # --- Accuracy Calculation (for quick summary) ---
+            # accuracy calculation (for quick summary)
             _, predicted_policy_indices = torch.max(policy_logits, 1)
             _, target_policy_indices = torch.max(policy_target, 1)
             correct_policy_predictions += (predicted_policy_indices == target_policy_indices).sum().item()
@@ -109,7 +109,7 @@ def validate_model(model, validation_loader, device, policy_loss_fn, value_loss_
             correct_value_predictions += (predicted_value_outcome == target_value_outcome).sum().item()
             total_value_predictions += value_target.size(0)
 
-    # --- Save raw results to a file ---
+    # save raw results to a file
     all_value_predictions = torch.cat(all_value_predictions)
     all_value_targets = torch.cat(all_value_targets)
     results_path = os.path.join(config.PathsConfig.POST_VALIDATION_DATA_DIR, f"validation_results_step_{global_step}.pt")
@@ -117,7 +117,7 @@ def validate_model(model, validation_loader, device, policy_loss_fn, value_loss_
     logger.info(f"Saved raw validation results for plotting to {results_path}")
 
 
-    # --- Log summary ---
+    # log summary
     processed_batches = 0  
     for batch in validation_loader:  
         if batch is not None:  
@@ -146,7 +146,7 @@ def worker_init_fn(worker_id):
 
     worker_info = torch.utils.data.get_worker_info()
     dataset = worker_info.dataset
-    if hasattr(dataset, "datasets"): # check if it's a ConcatDataset
+    if hasattr(dataset, "datasets"):
         for ds in dataset.datasets:
             ds.init_worker()
     else:
@@ -203,14 +203,24 @@ def train_model():
     os.makedirs(config.PathsConfig.LOGS_DIR, exist_ok=True)
     os.makedirs(config.PathsConfig.STEPS_LOG_DIR, exist_ok=True)
     os.makedirs(config.PathsConfig.POST_VALIDATION_DATA_DIR, exist_ok=True)
+
+
     
-    # 1) model initialization
     logger.info("Initializing model and optimizer...")
     model = HyperionNN().to(device)
-    optimizer = optim.Adam(params=model.parameters(),
-                           lr=config.TrainingConfig.LEARNING_RATE,
-                           weight_decay=config.TrainingConfig.WEIGHT_DECAY)
 
+    try:
+        model = torch.compile(model)
+        logger.info("Model compiled successfully with torch.compile().")
+    except Exception as e:
+        logger.warning(f"torch.compile() failed with error: {e}. Proceeding with the un-compiled model.")
+
+    #lowkey torch just said I should use this idrk where to put it
+    torch.set_float32_matmul_precision('high')
+
+    optimizer = optim.Adam(params=model.parameters(),
+                       lr=config.TrainingConfig.LEARNING_RATE,
+                       weight_decay=config.TrainingConfig.WEIGHT_DECAY)
     # 2) checkpoint loading
     global_step = 0
     start_epoch = 0
@@ -262,7 +272,7 @@ def train_model():
     validation_dataloader = DataLoader(
         dataset=validation_subset,
         batch_size=config.HardwareBasedConfig.BATCH_SIZE,
-        shuffle=False, # No need to shuffle validation data
+        shuffle=False,
         num_workers=config.HardwareBasedConfig.NUM_WORKERS,
         pin_memory=True,
         collate_fn=collate_fn,
@@ -301,7 +311,7 @@ def train_model():
             policy_target = policy_target.to(device)
             value_target = value_target.to(device)
 
-            optimizer.zero_grad()
+            optimizer.zero_grad(set_to_none=True)
             policy_logits, value_output = model(input_planes)
 
             # calculate losses
@@ -326,7 +336,7 @@ def train_model():
                 with open(os.path.join(config.PathsConfig.STEPS_LOG_DIR, "step_log.txt"), 'a') as f:
                     f.write(log_message + '\n')
 
-            # --- Validation Logic ---
+            # validation logic
             if global_step % config.TrainingConfig.VALIDATE_EVERY_N_STEPS == 0:
                 if validation_dataloader:
                     validate_model(model, validation_dataloader, device, policy_loss_fn, value_loss_fn, global_step)
@@ -349,11 +359,11 @@ def train_model():
                 }, f=checkpoint_path)
                 logger.info(f"Checkpoint saved to {checkpoint_path}")
 
-            # Exit condition if we reach the target number of steps mid-epoch
+            # exit condition if we reach the target number of steps mid-epoch
             if global_step >= config.TrainingConfig.TOTAL_TARGET_TRAINING_STEPS:
                 break
 
-        # Another check to break the outer loop
+        # another check to break the outer loop
         if global_step >= config.TrainingConfig.TOTAL_TARGET_TRAINING_STEPS:
             break
 

@@ -39,8 +39,8 @@ void MoveGenerator::generate_legal_puzzle_moves(const Position& pos, std::vector
         temp_pos->unmake_move(move);
     }
 }
-// --- Primary Move Generation Function ---
-// NEW GENERATE LEGAL MOVES, calls puseodo legal moves which should be faster ( i think)
+// primary move generation function
+// new generate legal moves, calls puseodo legal moves which should be faster ( i think)
 
 void MoveGenerator::generate_legal_moves(const Position& pos, std::vector<Move>& legal_move_list) {
     // 1. Generate all pseudo-legal moves into a temporary list.
@@ -142,7 +142,7 @@ void MoveGenerator::generate_legal_moves(const Position& pos, std::vector<Move>&
     }
 }
 */
-//--- pusedo move generation ---
+// pusedo move generation
 void MoveGenerator::generate_pseudo_legal_moves(const Position& pos, std::vector<Move>& pseudo_legal_move_list) {
     pseudo_legal_move_list.clear();
     pseudo_legal_move_list.reserve(256);
@@ -194,7 +194,7 @@ void MoveGenerator::generate_pseudo_legal_moves(const Position& pos, std::vector
     add_castling_moves(pos, side_to_move, pseudo_legal_move_list);
 }
 
-// --- Helper functions implementation ---
+// helper functions implementation
 
 void MoveGenerator::add_pawn_moves(const Position& pos, int color, std::vector<Move>& move_list) {
     bitboard_t pawns = pos.get_pieces(P_PAWN, color);
@@ -227,15 +227,15 @@ void MoveGenerator::add_pawn_moves(const Position& pos, int color, std::vector<M
             move_list.push_back(Move::make_normal(from_sq, to_sq, P_PAWN));
         }
 
-        // --- 2. Double Pawn Pushes (White) ---
-        // Pawns must be on rank 2, and their single push target must be empty,
+        // double pawn pushes (white)
+        // pawns must be on rank 2, and their single push target must be empty,
         // and their double push target must be empty.
         // `single_push_targets` already ensures the first step is to an empty square.
-        // We consider only those pawns on rank 2 that could make a single push.
-        bitboard_t double_push_candidates = (pawns & RANK_2_BB); // Pawns on starting rank
+        // we consider only those pawns on rank 2 that could make a single push.
+        bitboard_t double_push_candidates = (pawns & RANK_2_BB); // pawns on starting rank
         bitboard_t double_push_targets = ((double_push_candidates << 8) & empty_squares) << 8 & empty_squares;
-        // A more direct way:
-        // bitboard_t double_push_targets = ((pawns & RANK_2_BB) << 16) & empty_squares & (empty_squares << 8); // Ensures intermediate square is empty
+        // a more direct way:
+        // bitboard_t double_push_targets = ((pawns & RANK_2_BB) << 16) & empty_squares & (empty_squares << 8); // ensures intermediate square is empty
 
         current_pawns_bb = double_push_targets;
         while (current_pawns_bb) {
@@ -244,11 +244,11 @@ void MoveGenerator::add_pawn_moves(const Position& pos, int color, std::vector<M
             move_list.push_back(Move(from_sq, to_sq, P_PAWN, P_NONE, DOUBLE_PAWN_PUSH));
         }
 
-        // --- 3. Pawn Captures (White) ---
-        // Capture Right (pawns moving from SW to NE, attack to their "right" visually)
+        // pawn captures (white)
+        // capture right (pawns moving from SW to NE, attack to their "right" visually)
         bitboard_t capture_right_targets = ((pawns & NOT_FILE_H_BB) << 9) & opponent_pieces; // Shift NE, avoid H-file wrap
 
-        // Promotions by capture right
+        // promotions by capture right
         bitboard_t promo_capture_right = capture_right_targets & RANK_8_BB;
         current_pawns_bb = promo_capture_right;
         while (current_pawns_bb) {
@@ -289,11 +289,11 @@ void MoveGenerator::add_pawn_moves(const Position& pos, int color, std::vector<M
             move_list.push_back(Move::make_capture(from_sq, to_sq, P_PAWN, captured_piece));
         }
 
-        // --- 4. En Passant (White) ---
+        // en passant (white)
         if (pos.en_passant_square != square_e::NO_SQ) {
-            // White can only EP if the target EP square is on rank 6 (meaning black pawn just moved to rank 5 from rank 7)
+            // white can only EP if the target EP square is on rank 6 (meaning black pawn just moved to rank 5 from rank 7)
             if (get_rank_idx(pos.en_passant_square) == RANK_6_IDX) { // Rank 6 is index 5
-                // Find white pawns that attack the en passant square
+                // find white pawns that attack the en passant square
                 // `pawn_attacks[BLACK][ep_sq]` gives squares a black pawn on ep_sq would attack.
                 // If any of these are our white pawns, they can EP.
                 bitboard_t ep_attackers = pawn_attacks[BLACK][static_cast<int>(pos.en_passant_square)] & pawns;
@@ -306,10 +306,10 @@ void MoveGenerator::add_pawn_moves(const Position& pos, int color, std::vector<M
         }
 
     } else { // color == BLACK (Symmetrical logic)
-        // --- 1. Single Pawn Pushes (Black) ---
+        // single pawn pushes (black)
         bitboard_t single_push_targets = (pawns >> 8) & empty_squares;
 
-        // Promotions by single push
+        // promotions by single push
         bitboard_t promo_single_pushes = single_push_targets & RANK_1_BB;
         current_pawns_bb = promo_single_pushes;
         while (current_pawns_bb) {
@@ -327,7 +327,7 @@ void MoveGenerator::add_pawn_moves(const Position& pos, int color, std::vector<M
             move_list.push_back(Move::make_normal(from_sq, to_sq, P_PAWN));
         }
 
-        // --- 2. Double Pawn Pushes (Black) ---
+        // double pawn pushes (black)
         bitboard_t double_push_candidates = (pawns & RANK_7_BB);
         bitboard_t double_push_targets = ((double_push_candidates >> 8) & empty_squares) >> 8 & empty_squares;
         // bitboard_t double_push_targets = ((pawns & RANK_7_BB) >> 16) & empty_squares & (empty_squares >> 8);
@@ -340,11 +340,11 @@ void MoveGenerator::add_pawn_moves(const Position& pos, int color, std::vector<M
             move_list.push_back(Move(from_sq, to_sq, P_PAWN, P_NONE, DOUBLE_PAWN_PUSH));
         }
 
-        // --- 3. Pawn Captures (Black) ---
-        // Capture Right (pawns moving from NE to SW, attack to their "right" visually)
+        // pawn captures (black)
+        // capture right (pawns moving from NE to SW, attack to their "right" visually)
         bitboard_t capture_right_targets = ((pawns & NOT_FILE_H_BB) >> 7) & opponent_pieces; // Shift SE, avoid H-file wrap
 
-        // Promotions by capture right
+        // promotions by capture right
         bitboard_t promo_capture_right = capture_right_targets & RANK_1_BB;
         current_pawns_bb = promo_capture_right;
         while (current_pawns_bb) {
@@ -385,9 +385,9 @@ void MoveGenerator::add_pawn_moves(const Position& pos, int color, std::vector<M
             move_list.push_back(Move::make_capture(from_sq, to_sq, P_PAWN, captured_piece));
         }
 
-        // --- 4. En Passant (Black) ---
+        // en passant (black)
         if (pos.en_passant_square != square_e::NO_SQ) {
-            // Black can only EP if the target EP square is on rank 3 (meaning white pawn just moved to rank 4 from rank 2)
+            // black can only EP if the target EP square is on rank 3 (meaning white pawn just moved to rank 4 from rank 2)
             if (get_rank_idx(pos.en_passant_square) == RANK_3_IDX) { // Rank 3 is index 2
                 bitboard_t ep_attackers = pawn_attacks[WHITE][static_cast<int>(pos.en_passant_square)] & pawns;
                 current_pawns_bb = ep_attackers;
@@ -423,7 +423,7 @@ void MoveGenerator::add_knight_moves(const Position& pos, int color, square_e fr
 
 void MoveGenerator::add_bishop_moves(const Position& pos, int color, square_e from_sq, std::vector<Move>& move_list) {
     bitboard_t bishop_attack_squares = get_bishop_slider_attacks(from_sq, pos.get_occupied_squares());
-    // --- RAY CASTING ---
+    // ray casting
     /*
     bitboard_t bishop_attack_squares = hyperion::core::generate_attacks_slow_internal(
         static_cast<int>(from_sq),      // The square of the bishop
@@ -451,7 +451,7 @@ void MoveGenerator::add_bishop_moves(const Position& pos, int color, square_e fr
 
 void MoveGenerator::add_rook_moves(const Position& pos, int color, square_e from_sq, std::vector<Move>& move_list) {
     bitboard_t rook_attack_squares = get_rook_slider_attacks(from_sq, pos.get_occupied_squares());
-    // --- RAY CASTING ---
+    // ray casting
     /*
     bitboard_t rook_attack_squares = hyperion::core::generate_attacks_slow_internal(
         static_cast<int>(from_sq),      // The square of the rook
@@ -483,7 +483,7 @@ void MoveGenerator::add_queen_moves(const Position& pos, int color, square_e fro
     
     
     bitboard_t queen_attack_squares = get_rook_slider_attacks(from_sq, pos.get_occupied_squares()) | get_bishop_slider_attacks(from_sq, pos.get_occupied_squares());
-    // --- RAY CASTING ---
+    // --- RAY CASTING -    
     /*
     bitboard_t queen_attack_squares =
         hyperion::core::generate_attacks_slow_internal(

@@ -24,7 +24,7 @@ public:
     std::array<bitboard_t, 2> color_bbs; // color_bbs[WHITE] = all white pieces, color_bbs[BLACK] = all black pieces
     bitboard_t occupied_bb;              // All occupied squares (color_bbs[WHITE] | color_bbs[BLACK])
 
-    // --- Game State ---
+    // game state 
     int side_to_move;
     int castling_rights;       // Use constants like WK_CASTLE_FLAG, etc.
     square_e en_passant_square;  // NO_SQ if no EP square
@@ -41,7 +41,6 @@ public:
     void set_from_fen(const std::string& fen_string);
     std::string to_fen() const;
 
-    // --- Accessors ---
     int get_side_to_move() const { return side_to_move; }
     bitboard_t get_pieces(piece_type_e p_type, int p_color) const;
     bitboard_t get_pieces_by_type(piece_type_e p_type) const; // All pieces of a type (e.g. all pawns)
@@ -57,12 +56,12 @@ public:
     // Piece on a specific square
     int get_piece_on_square(square_e sq) const; // Returns combined piece_type & color, or EMPTY_SQUARE
 
-    // --- Move Execution ---
+    
     // Returns true if the move was legal and made, false otherwise 
     void make_move(const Move& m);
     void unmake_move(const Move& m); // Needs the move that was made
 
-    // --- Legality & Game State Checks ---
+    
     // Checks if a square is attacked by the given color
     bool is_square_attacked(square_e sq, int attacker_color) const;
     // Checks if the king of the current side_to_move is in check

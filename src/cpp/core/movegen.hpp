@@ -12,18 +12,18 @@ class MoveGenerator {
 public:
     MoveGenerator();
 
-    // --- Primary Move Generation Function ---
-    // Generates all legal moves for the side to move in the given position.
-    // The generated moves are added to the 'move_list'.
+    // primary move generation function
+    // generates all legal moves for the side to move in the given position.
+    // the generated moves are added to the 'move_list'.
     void generate_legal_puzzle_moves(const Position& pos, std::vector<Move>& move_list);
     
     void generate_legal_moves(const Position& pos, std::vector<Move>& move_list);
-     // --- Pseudo-Legal Move Generation ---
+     // pseudo-legal move generation
     void generate_pseudo_legal_moves(const Position& pos, std::vector<Move>& pseudo_legal_move_list);
 
 private:
-    // --- Helper functions for generating moves for specific piece types ---
-    // These functions would generate pseudo-legal moves, which are then
+    // helper functions for generating moves for specific piece types
+    // these functions would generate pseudo-legal moves, which are then
     // checked for legality (e.g., not leaving the king in check) by the main function
     // or by themselves.
 
